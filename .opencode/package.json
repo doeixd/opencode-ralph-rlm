@@ -1,4 +1,5 @@
 {
+  "type": "module",
   "dependencies": {
     "effect": "^3.13.0"
   }

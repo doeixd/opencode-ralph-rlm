@@ -53,7 +53,7 @@
  */
 
 import type { Plugin } from "@opencode-ai/plugin";
-import { tool } from "@opencode-ai/plugin";
+import { tool } from "@opencode-ai/plugin/tool";
 import * as NodePath from "path";
 import { promises as NodeFs } from "fs";
 import {
@@ -124,7 +124,7 @@ function resolveConfig(raw: RalphConfig): ResolvedConfig {
   return {
     enabled: raw.enabled ?? CONFIG_DEFAULTS.enabled,
     maxAttempts: raw.maxAttempts ?? CONFIG_DEFAULTS.maxAttempts,
-    verify: raw.verify as ResolvedConfig["verify"],
+    ...(raw.verify !== undefined ? { verify: raw.verify as NonNullable<ResolvedConfig["verify"]> } : {}),
     gateDestructiveToolsUntilContextLoaded:
       raw.gateDestructiveToolsUntilContextLoaded ??
       CONFIG_DEFAULTS.gateDestructiveToolsUntilContextLoaded,
@@ -464,10 +464,7 @@ const appendFile = (p: string, content: string): Effect.Effect<void, FileError> 
   });
 
 const fileExists = (p: string): Effect.Effect<boolean> =>
-  Effect.tryPromise({
-    try: () => NodeFs.stat(p).then(() => true, () => false),
-    catch: () => false as boolean,
-  }).pipe(Effect.orElseSucceed(() => false));
+  Effect.promise((): Promise<boolean> => NodeFs.stat(p).then(() => true, () => false));
 
 const ensureFile = (p: string, defaultContent: string): Effect.Effect<void, FileError> =>
   Effect.gen(function* () {
@@ -677,17 +674,18 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
   const runVerify = (root: string): Effect.Effect<string> =>
     Effect.gen(function* () {
       const cfg = yield* getConfig();
-      if (!cfg.verify?.command?.length) {
+      if (!cfg.verify || !cfg.verify.command.length) {
         return JSON.stringify(
           { verdict: "unknown", reason: "No verify.command in .opencode/ralph.json." },
           null,
           2
         );
       }
+      const verifyCmd = cfg.verify.command;
       const cwd = NodePath.join(root, cfg.verify.cwd ?? ".");
       return yield* Effect.tryPromise({
         try: async () => {
-          const output = await $({ cwd })`${cfg.verify.command}`.text();
+          const output = await $({ cwd })`${verifyCmd}`.text();
           return JSON.stringify({ verdict: "pass", output }, null, 2);
         },
         catch: (err: any) =>
@@ -844,7 +842,7 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
 
           const matchedIndices: number[] = [];
           for (let i = 0; i < lines.length; i++) {
-            if (re.test(lines[i])) {
+            if (re.test(lines[i] ?? "")) {
               matchedIndices.push(i);
               if (matchedIndices.length >= maxM) break;
             }
@@ -855,7 +853,7 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
             const end = Math.min(lines.length - 1, i + ctx_);
             return {
               matchLine: i + 1,
-              matchText: lines[i],
+              matchText: lines[i] ?? "",
               context:
                 ctx_ > 0
                   ? lines.slice(start, end + 1).map((t, offset) => ({
@@ -1102,13 +1100,10 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
         doneHeading: templates.subagentDoneHeading,
       });
 
-      const childSessionRaw = await client.session.create({
+      const childSessionResult = await client.session.create({
         body: { title: `sub-agent: ${args.name}` },
       });
-      const childSessionId: string =
-        (childSessionRaw as any)?.id ??
-        (childSessionRaw as any)?.session?.id ??
-        `unknown-${Date.now()}`;
+      const childSessionId: string = childSessionResult.data?.id ?? `unknown-${Date.now()}`;
 
       await client.session.prompt({
         path: { id: childSessionId },
@@ -1206,11 +1201,11 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
     mutateSession(sessionID, (s) => { s.lastIdleHandledAt = Date.now(); });
 
     if (st.attempt >= cfg.maxAttempts) {
-      await client.tui.toast.show({
+      await client.tui.showToast({
         body: {
           title: "Ralph: stopped",
           message: `Max attempts (${cfg.maxAttempts}) reached. Review AGENT_CONTEXT_FOR_NEXT_RALPH.md.`,
-          type: "warning",
+          variant: "warning",
         },
       }).catch(() => {});
       return;
@@ -1234,8 +1229,8 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
           interpolate(templates.doneFileContent, { timestamp: nowISO() })
         )
       );
-      await client.tui.toast.show({
-        body: { title: "Ralph: Done ✓", message: "Verification passed. Loop complete.", type: "success" },
+      await client.tui.showToast({
+        body: { title: "Ralph: Done", message: "Verification passed. Loop complete.", variant: "success" },
       }).catch(() => {});
       return;
     }

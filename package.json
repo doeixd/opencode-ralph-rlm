@@ -36,6 +36,7 @@
   },
   "devDependencies": {
     "@opencode-ai/plugin": "*",
+    "@types/node": "^22.0.0",
     "effect": "^3.13.0",
     "typescript": "^5.7.0"
   }
