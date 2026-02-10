@@ -11,5 +11,6 @@
   "requireGrepBeforeLargeSlice": true,
   "grepRequiredThresholdLines": 120,
   "subAgentEnabled": true,
-  "maxSubAgents": 5
+  "maxSubAgents": 5,
+  "agentMdPath": "AGENT.md"
 }

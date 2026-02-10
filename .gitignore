@@ -2,3 +2,4 @@ node_modules/
 dist/
 .opencode/tmp/
 *.diff
+.claude/

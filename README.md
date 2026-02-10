@@ -81,7 +81,8 @@ Create `.opencode/ralph.json`. All fields are optional — the plugin runs with 
   "requireGrepBeforeLargeSlice": true,
   "grepRequiredThresholdLines": 120,
   "subAgentEnabled": true,
-  "maxSubAgents": 5
+  "maxSubAgents": 5,
+  "agentMdPath": "AGENT.md"
 }
 ```
 
@@ -97,6 +98,7 @@ Create `.opencode/ralph.json`. All fields are optional — the plugin runs with 
 | `grepRequiredThresholdLines` | `120` | Line threshold above which grep-first is required. |
 | `subAgentEnabled` | `true` | Allow `subagent_spawn`. |
 | `maxSubAgents` | `5` | Maximum concurrently running sub-agents per session. |
+| `agentMdPath` | `"AGENT.md"` | Path (relative to repo root) to the project AGENT.md. Read by `ralph_load_context()` and included in the context payload. Set to `""` to disable. |
 
 ### verify command examples
 
@@ -126,6 +128,86 @@ The plugin bootstraps these files on first run if they do not exist. They are th
 | `TODOS.md` | Optional lightweight task list. |
 
 Sub-agent state lives under `.opencode/agents/<name>/` with the same structure.
+
+
+## Working with AGENT.md
+
+OpenCode loads `AGENT.md` from the repo root into every session's system prompt automatically. The plugin coexists with this but the two files serve different roles:
+
+| | `AGENT.md` | `RLM_INSTRUCTIONS.md` |
+|---|---|---|
+| **Scope** | Static project-wide rules | Dynamic per-loop operating manual |
+| **Who writes it** | You (developer) | Agent (via `ralph_update_rlm_instructions()`) |
+| **Changes** | Rarely — git-committed conventions | Every loop — playbooks, learnings, constraints |
+| **Injected by** | OpenCode automatically (system prompt) | `ralph_load_context()` return payload |
+
+### What the plugin does with AGENT.md
+
+`ralph_load_context()` automatically reads `AGENT.md` (configurable via `agentMdPath`) and includes it in the context payload under `agent_md`. This means:
+
+- Sub-agents, which run in isolated sessions that may not have AGENT.md injected, still see the project rules.
+- Every attempt starts with both the static project context and the dynamic loop state in one payload.
+
+To disable AGENT.md inclusion, set `agentMdPath` to `""` in `.opencode/ralph.json`:
+
+```json
+{ "agentMdPath": "" }
+```
+
+To point to a non-standard location:
+
+```json
+{ "agentMdPath": "docs/AGENT.md" }
+```
+
+### Recommended AGENT.md structure
+
+Keep AGENT.md focused on facts that never change loop-to-loop: repo layout, build commands, code style. Defer loop-specific guidance to `RLM_INSTRUCTIONS.md`.
+
+```markdown
+# Project Agent Rules
+
+## Repo layout
+- `src/`      — application source
+- `tests/`    — test suite (`bun test`)
+- `docs/`     — documentation
+
+## Build and verify
+- Install:  `bun install`
+- Test:     `bun test`
+- Typecheck: `bun run typecheck`
+
+## Code style
+- TypeScript strict mode; no `any`
+- Prefer Effect-TS over raw Promises for async/error handling
+
+## Loop guidance
+This project uses the ralph-rlm plugin.
+- Call `ralph_load_context()` at the start of every attempt.
+- Task-specific playbooks live in `RLM_INSTRUCTIONS.md` — check there for the current strategy before starting work.
+- Do NOT put attempt-specific state in AGENT.md; write it to `CURRENT_STATE.md` or `NOTES_AND_LEARNINGS.md`.
+```
+
+### Avoiding conflicts
+
+If your AGENT.md contains instructions that clash with the plugin's file-first rules (e.g. "always read files in full"), add a note that defers to `RLM_INSTRUCTIONS.md`:
+
+```markdown
+## Note on file access
+When working with the ralph-rlm loop, prefer `rlm_grep` + `rlm_slice` for large files
+over full reads. The loop-specific protocol in `RLM_INSTRUCTIONS.md` takes precedence
+over general file-access guidance in this document.
+```
+
+### Extending the system prompt instead
+
+If you want your AGENT.md content appended to the plugin's system prompt fragment (instead of included in the context payload), use `RALPH_SYSTEM_PROMPT_APPEND`:
+
+```bash
+export RALPH_SYSTEM_PROMPT_APPEND="@AGENT.md"
+```
+
+This injects the file on every turn rather than only when `ralph_load_context()` is called.
 
 
 ## Tools

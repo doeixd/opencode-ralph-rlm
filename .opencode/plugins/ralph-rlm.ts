@@ -80,6 +80,16 @@ const RalphConfigSchema = Schema.Struct({
   grepRequiredThresholdLines: Schema.optional(Schema.Number),
   subAgentEnabled: Schema.optional(Schema.Boolean),
   maxSubAgents: Schema.optional(Schema.Number),
+  /**
+   * Path (relative to repo root) of the project AGENT.md file.
+   * When set, ralph_load_context() reads it and includes its content in the
+   * returned context payload so the agent always sees it — even in sub-agents
+   * that run in isolated sessions where OpenCode may not inject it automatically.
+   *
+   * Set to "" or null to disable (content will simply be omitted from the payload).
+   * Default: "AGENT.md"
+   */
+  agentMdPath: Schema.optional(Schema.String),
 });
 
 type RalphConfig = Schema.Schema.Type<typeof RalphConfigSchema>;
@@ -94,6 +104,8 @@ type ResolvedConfig = {
   grepRequiredThresholdLines: number;
   subAgentEnabled: boolean;
   maxSubAgents: number;
+  /** Relative path to AGENT.md; empty string disables inclusion. */
+  agentMdPath: string;
 };
 
 const CONFIG_DEFAULTS: ResolvedConfig = {
@@ -105,6 +117,7 @@ const CONFIG_DEFAULTS: ResolvedConfig = {
   grepRequiredThresholdLines: 120,
   subAgentEnabled: true,
   maxSubAgents: 5,
+  agentMdPath: "AGENT.md",
 };
 
 function resolveConfig(raw: RalphConfig): ResolvedConfig {
@@ -122,6 +135,7 @@ function resolveConfig(raw: RalphConfig): ResolvedConfig {
       raw.grepRequiredThresholdLines ?? CONFIG_DEFAULTS.grepRequiredThresholdLines,
     subAgentEnabled: raw.subAgentEnabled ?? CONFIG_DEFAULTS.subAgentEnabled,
     maxSubAgents: raw.maxSubAgents ?? CONFIG_DEFAULTS.maxSubAgents,
+    agentMdPath: raw.agentMdPath ?? CONFIG_DEFAULTS.agentMdPath,
   };
 }
 
@@ -720,11 +734,14 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
       const sessionID = ctx.sessionID ?? "default";
       mutateSession(sessionID, (s) => { s.loadedContext = true; });
       const st = getSession(sessionID);
+      const cfg = await run(getConfig());
       const j = (f: string) => NodePath.join(root, f);
 
       return run(
         Effect.gen(function* () {
-          const [plan, rlmInstr, nextRalph, curr, prev, notes, todos, rlmRaw] =
+          const agentMdAbs = cfg.agentMdPath ? j(cfg.agentMdPath) : null;
+
+          const [plan, rlmInstr, nextRalph, curr, prev, notes, todos, rlmRaw, agentMd] =
             yield* Effect.all(
               [
                 readFile(j(FILES.PLAN)).pipe(Effect.orElseSucceed(() => "(missing — create PLAN.md)")),
@@ -735,6 +752,9 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
                 readFile(j(FILES.NOTES)).pipe(Effect.orElseSucceed(() => "(empty)")),
                 readFile(j(FILES.TODOS)).pipe(Effect.orElseSucceed(() => "(empty)")),
                 readFile(j(FILES.RLM_CTX)).pipe(Effect.orElseSucceed(() => "")),
+                agentMdAbs
+                  ? readFile(agentMdAbs).pipe(Effect.orElseSucceed(() => null as string | null))
+                  : Effect.succeed(null as string | null),
               ],
               { concurrency: "unbounded" }
             );
@@ -744,27 +764,35 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
             ? extractHeadings(rlmRaw, args.rlmHeadingsMax ?? 80)
             : clampLines(rlmRaw, 200);
 
-          return JSON.stringify(
-            {
-              protocol_files: FILES,
-              plan,
-              rlm_instructions: rlmInstr,
-              agent_context_for_next_ralph: nextRalph,
-              current_state: curr,
-              previous_state: prev,
-              notes_and_learnings: clampLines(notes, 200),
-              todos: clampLines(todos, 200),
-              context_for_rlm: {
-                path: FILES.RLM_CTX,
-                headings: rlmContext,
-                policy: "Use rlm_grep + rlm_slice to access this file. Never dump it fully.",
-              },
-              sub_agents: st.subAgents,
-              session: { attempt: st.attempt, loadedContext: st.loadedContext },
+          const payload: Record<string, unknown> = {
+            protocol_files: FILES,
+            plan,
+            rlm_instructions: rlmInstr,
+            agent_context_for_next_ralph: nextRalph,
+            current_state: curr,
+            previous_state: prev,
+            notes_and_learnings: clampLines(notes, 200),
+            todos: clampLines(todos, 200),
+            context_for_rlm: {
+              path: FILES.RLM_CTX,
+              headings: rlmContext,
+              policy: "Use rlm_grep + rlm_slice to access this file. Never dump it fully.",
             },
-            null,
-            2
-          );
+            sub_agents: st.subAgents,
+            session: { attempt: st.attempt, loadedContext: st.loadedContext },
+          };
+
+          // Include AGENT.md when found — surface project-level conventions to every
+          // attempt and sub-agent so static rules are always in scope.
+          if (agentMd !== null) {
+            payload["agent_md"] = {
+              path: cfg.agentMdPath,
+              content: agentMd,
+              note: "Static project rules from AGENT.md. RLM_INSTRUCTIONS.md governs loop-specific behaviour; prefer updating it over AGENT.md for task-specific guidance.",
+            };
+          }
+
+          return JSON.stringify(payload, null, 2);
         })
       );
     },
