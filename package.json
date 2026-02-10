@@ -1,6 +1,6 @@
 {
   "name": "opencode-ralph-rlm",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "OpenCode plugin: Ralph outer loop + RLM inner loop. Iterative AI development with file-first discipline and sub-agent support.",
   "type": "module",
   "main": "./dist/ralph-rlm.js",
