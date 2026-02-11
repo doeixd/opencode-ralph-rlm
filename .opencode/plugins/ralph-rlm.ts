@@ -303,6 +303,7 @@ const DEFAULT_TEMPLATES: PromptTemplates = {
     "  When you receive one, call ralph_respond(id, answer) to unblock the session.",
     "- Use ralph_doctor() to check setup, ralph_bootstrap_plan() to generate PLAN/TODOS,",
     "  ralph_create_supervisor_session() to bind/start explicitly, ralph_pause_supervision()/ralph_resume_supervision() to control execution, and ralph_end_supervision() to stop.",
+    "- End supervision when verification has passed and the user confirms they are done, or when the user explicitly asks to stop the loop.",
     "- Optional reviewer flow: worker marks readiness with ralph_request_review(); supervisor runs ralph_run_reviewer().",
     "- Monitor progress in SUPERVISOR_LOG.md, CONVERSATION.md, or via toast notifications.",
   ].join("\n"),
@@ -1119,10 +1120,22 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
     await run(writeFile(convPath, `# Conversation Log (append-only)\n\n- ${nowISO()} rotated\n`)).catch(() => {});
   };
 
+  const DEDUPE_WINDOW_MS = 5_000;
+  const recentNotices = new Map<string, number>();
+  const shouldDedupe = (key: string): boolean => {
+    const now = Date.now();
+    const last = recentNotices.get(key);
+    if (last && now - last < DEDUPE_WINDOW_MS) return true;
+    if (recentNotices.size > 200) recentNotices.clear();
+    recentNotices.set(key, now);
+    return false;
+  };
+
   const appendConversationEntry = async (
     source: string,
     message: string
   ): Promise<void> => {
+    if (shouldDedupe(`conv|${source}|${message}`)) return;
     const cfg = await run(getConfig());
     await rotateConversationLogIfNeeded(cfg);
     const ts = nowISO();
@@ -1139,6 +1152,7 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
     postToConversation = true,
     originSessionId?: string
   ): Promise<void> => {
+    if (shouldDedupe(`sup|${source}|${level}|${message}`)) return;
     const cfg = await run(getConfig());
     if (!messagePassesVerbosity(cfg.statusVerbosity, level)) return;
 
@@ -1165,6 +1179,36 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
     }
   };
 
+  const detectProjectDefaults = (root: string): Effect.Effect<{ verify: string[]; install: string }> =>
+    Effect.gen(function* () {
+      const j = (f: string) => NodePath.join(root, f);
+
+      const hasBunLock = (yield* fileExists(j("bun.lockb"))) || (yield* fileExists(j("bun.lock")));
+      if (hasBunLock) return { verify: ["bun", "run", "verify"], install: "bun install" };
+
+      const hasYarnLock = yield* fileExists(j("yarn.lock"));
+      if (hasYarnLock) return { verify: ["yarn", "test"], install: "yarn install" };
+
+      const hasPnpmLock = yield* fileExists(j("pnpm-lock.yaml"));
+      if (hasPnpmLock) return { verify: ["pnpm", "test"], install: "pnpm install" };
+
+      const hasPkg = yield* fileExists(j("package.json"));
+      if (hasPkg) return { verify: ["npm", "test"], install: "npm install" };
+
+      const hasCargo = yield* fileExists(j("Cargo.toml"));
+      if (hasCargo) return { verify: ["cargo", "test"], install: "cargo build" };
+
+      const hasPy = yield* fileExists(j("pyproject.toml"));
+      const hasReq = yield* fileExists(j("requirements.txt"));
+      if (hasReq) return { verify: ["python", "-m", "pytest"], install: "pip install -r requirements.txt" };
+      if (hasPy) return { verify: ["python", "-m", "pytest"], install: "pip install ." };
+
+      const hasMake = yield* fileExists(j("Makefile"));
+      if (hasMake) return { verify: ["make", "test"], install: "make" };
+
+      return { verify: ["bun", "run", "verify"], install: "bun install" };
+    });
+
   const checkSetup = async (root: string, cfg: ResolvedConfig): Promise<SetupDiagnostics> => {
     const diagnostics: SetupDiagnostics = {
       ready: true,
@@ -1177,7 +1221,8 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
     if (!cfg.verify || cfg.verify.command.length === 0) {
       diagnostics.ready = false;
       diagnostics.issues.push("Missing verify.command in .opencode/ralph.json.");
-      diagnostics.suggestions.push("Set verify.command, e.g. [\"bun\", \"run\", \"verify\"].");
+      const defaults = await run(detectProjectDefaults(root));
+      diagnostics.suggestions.push(`Set verify.command, e.g. ${JSON.stringify(defaults.verify)}.`);
     }
 
     const planExists = await run(fileExists(j(FILES.PLAN)));
@@ -1650,6 +1695,54 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
   });
 
   // ────────────────────────────────────────────────────────────────────────────
+  // Tool: ralph_peek_worker
+  // ────────────────────────────────────────────────────────────────────────────
+  const tool_ralph_peek_worker = tool({
+    description:
+      "Snapshot the active RLM worker's CURRENT_STATE.md and optionally post it into the main conversation.",
+    args: {
+      maxLines: tool.schema.number().int().min(20).max(400).optional(),
+      post_to_conversation: tool.schema
+        .boolean()
+        .optional()
+        .describe("Whether to post the peek into the main conversation (default: true)."),
+    },
+    async execute(args, ctx) {
+      const root = ctx.worktree ?? worktree;
+      const currPath = NodePath.join(root, FILES.CURR);
+      const ok = await run(fileExists(currPath));
+      if (!ok) return JSON.stringify({ ok: false, missing: FILES.CURR }, null, 2);
+
+      const raw = await run(readFile(currPath).pipe(Effect.orElseSucceed(() => "")));
+      const text = clampLines(raw, args.maxLines ?? 120);
+      const attempt = supervisor.attempt;
+      const workerId = supervisor.currentWorkerSessionId;
+      const header = `Worker peek${attempt ? ` (attempt ${attempt})` : ""}${workerId ? ` — ${workerId}` : ""}`;
+
+      await notifySupervisor("peek", header, "info", false, ctx.sessionID);
+
+      const postToConv = args.post_to_conversation !== false;
+      if (postToConv && supervisor.sessionId && supervisor.sessionId !== ctx.sessionID) {
+        await client.session.promptAsync({
+          path: { id: supervisor.sessionId },
+          body: { parts: [{ type: "text", text: `[peek] ${header}\n\n${text}` }] },
+        }).catch(() => {});
+      }
+
+      return JSON.stringify(
+        {
+          ok: true,
+          attempt: attempt || null,
+          workerSessionId: workerId ?? null,
+          text,
+        },
+        null,
+        2
+      );
+    },
+  });
+
+  // ────────────────────────────────────────────────────────────────────────────
   // Tool: subagent_peek
   // ────────────────────────────────────────────────────────────────────────────
   const tool_subagent_peek = tool({
@@ -2042,6 +2135,7 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
       const actions: string[] = [];
 
       if (args.autofix) {
+        const defaults = await run(detectProjectDefaults(root));
         const configPath = NodePath.join(root, ".opencode", "ralph.json");
         const configExists = await run(fileExists(configPath));
         if (!configExists) {
@@ -2051,7 +2145,7 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
             statusVerbosity: "normal",
             maxAttempts: 25,
             heartbeatMinutes: 15,
-            verify: { command: ["bun", "run", "verify"], cwd: "." },
+            verify: { command: defaults.verify, cwd: "." },
             gateDestructiveToolsUntilContextLoaded: true,
             maxRlmSliceLines: 200,
             requireGrepBeforeLargeSlice: true,
@@ -2079,8 +2173,8 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
             "# Project Agent Rules",
             "",
             "## Build and verify",
-            "- Install: bun install",
-            "- Verify: bun run verify",
+            `- Install: ${defaults.install}`,
+            `- Verify: ${defaults.verify.join(" ")}`,
             "",
             "## Loop note",
             "- This project uses ralph-rlm.",
@@ -2503,13 +2597,14 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
         const configPath = NodePath.join(root, ".opencode", "ralph.json");
         const configExists = await run(fileExists(configPath));
         if (!configExists) {
+          const defaults = await run(detectProjectDefaults(root));
           const defaultCfg = {
             enabled: true,
             autoStartOnMainIdle: false,
             statusVerbosity: "normal",
             maxAttempts: 25,
             heartbeatMinutes: 15,
-            verify: { command: ["bun", "run", "verify"], cwd: "." },
+            verify: { command: defaults.verify, cwd: "." },
             gateDestructiveToolsUntilContextLoaded: true,
             maxRlmSliceLines: 200,
             requireGrepBeforeLargeSlice: true,
@@ -3148,6 +3243,7 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
       ralph_update_rlm_instructions: tool_ralph_update_rlm_instructions,
       ralph_rollover: tool_ralph_rollover,
       ralph_verify: tool_ralph_verify,
+      ralph_peek_worker: tool_ralph_peek_worker,
       ralph_spawn_worker: tool_ralph_spawn_worker,
       subagent_peek: tool_subagent_peek,
       subagent_spawn: tool_subagent_spawn,

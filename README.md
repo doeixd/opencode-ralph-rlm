@@ -438,6 +438,7 @@ Bind the current session as the supervisor and optionally start attempt 1 immedi
 Stop supervision for the current process. This prevents further auto-loop orchestration until restarted.
 
 - Use this when you want to pause/stop Ralph from spawning more sessions.
+- Use this after verification passes and the user confirms they are done, or when the user asks to stop the loop.
 - Resume later with `ralph_create_supervisor_session(restart_if_done=true)`.
 
 #### `ralph_supervision_status()`
@@ -570,6 +571,16 @@ args:
   message              string   required  Progress message
   level                string   optional  "info" | "warning" | "error" (default: "info")
   post_to_conversation boolean  optional  Post to main conversation (default: true)
+```
+
+#### `ralph_peek_worker(maxLines?, post_to_conversation?)`
+
+Snapshot the active worker's `CURRENT_STATE.md` and optionally post it into the main conversation for quick "peek" access in the TUI.
+
+```
+args:
+  maxLines            number   optional  Max lines to include (default: 120)
+  post_to_conversation boolean optional  Post to main conversation (default: true)
 ```
 
 #### `ralph_ask(question, context?, timeout_minutes?)`
