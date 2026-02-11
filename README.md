@@ -228,6 +228,8 @@ Create `.opencode/ralph.json`. All fields are optional — the plugin runs with 
 | `statusVerbosity` | `"normal"` | Supervisor status emission level: `minimal` (warnings/errors), `normal`, or `verbose`. |
 | `maxAttempts` | `20` | Hard stop after this many failed verify attempts. |
 | `heartbeatMinutes` | `15` | Warn if active strategist/worker has no progress for this many minutes. |
+| `strategistHandoffMinutes` | `5` | Warn/retry if the strategist does not spawn a worker within this many minutes. |
+| `strategistHandoffMaxRetries` | `2` | Max retries to respawn strategist after a missed handoff. |
 | `verifyTimeoutMinutes` | `0` | Timeout for verify command in minutes. `0` disables timeouts. |
 | `verify.command` | - | Shell command to run as an array, e.g. `["bun", "run", "verify"]`. If omitted, verify always returns `unknown`. |
 | `verify.cwd` | `"."` | Working directory for the verify command, relative to the repo root. |

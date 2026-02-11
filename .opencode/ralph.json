@@ -5,6 +5,8 @@
   "statusVerbosity": "normal",
   "maxAttempts": 25,
   "heartbeatMinutes": 15,
+  "strategistHandoffMinutes": 5,
+  "strategistHandoffMaxRetries": 2,
   "verifyTimeoutMinutes": 15,
   "verify": {
     "command": ["bun", "run", "verify"],

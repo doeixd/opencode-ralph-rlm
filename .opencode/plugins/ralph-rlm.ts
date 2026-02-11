@@ -83,6 +83,8 @@ const RalphConfigSchema = Schema.Struct({
   statusVerbosity: Schema.optional(Schema.Union(Schema.Literal("minimal"), Schema.Literal("normal"), Schema.Literal("verbose"))),
   maxAttempts: Schema.optional(Schema.Number),
   heartbeatMinutes: Schema.optional(Schema.Number),
+  strategistHandoffMinutes: Schema.optional(Schema.Number),
+  strategistHandoffMaxRetries: Schema.optional(Schema.Number),
   verifyTimeoutMinutes: Schema.optional(Schema.Number),
   verify: Schema.optional(VerifyConfigSchema),
   gateDestructiveToolsUntilContextLoaded: Schema.optional(Schema.Boolean),
@@ -118,6 +120,8 @@ type ResolvedConfig = {
   statusVerbosity: "minimal" | "normal" | "verbose";
   maxAttempts: number;
   heartbeatMinutes: number;
+  strategistHandoffMinutes: number;
+  strategistHandoffMaxRetries: number;
   verifyTimeoutMinutes: number;
   verify?: { command: string[]; cwd?: string };
   gateDestructiveToolsUntilContextLoaded: boolean;
@@ -167,6 +171,8 @@ const CONFIG_DEFAULTS: ResolvedConfig = {
   statusVerbosity: "normal",
   maxAttempts: 20,
   heartbeatMinutes: 15,
+  strategistHandoffMinutes: 5,
+  strategistHandoffMaxRetries: 2,
   verifyTimeoutMinutes: 0,
   gateDestructiveToolsUntilContextLoaded: true,
   maxRlmSliceLines: 200,
@@ -200,6 +206,8 @@ function resolveConfig(raw: RalphConfig): ResolvedConfig {
     statusVerbosity: raw.statusVerbosity ?? CONFIG_DEFAULTS.statusVerbosity,
     maxAttempts: toBoundedInt(raw.maxAttempts, CONFIG_DEFAULTS.maxAttempts, 1, 500),
     heartbeatMinutes: toBoundedInt(raw.heartbeatMinutes, CONFIG_DEFAULTS.heartbeatMinutes, 1, 240),
+    strategistHandoffMinutes: toBoundedInt(raw.strategistHandoffMinutes, CONFIG_DEFAULTS.strategistHandoffMinutes, 1, 60),
+    strategistHandoffMaxRetries: toBoundedInt(raw.strategistHandoffMaxRetries, CONFIG_DEFAULTS.strategistHandoffMaxRetries, 0, 10),
     verifyTimeoutMinutes: toBoundedInt(raw.verifyTimeoutMinutes, CONFIG_DEFAULTS.verifyTimeoutMinutes, 0, 240),
     ...(verify !== undefined
       ? { verify: verify as NonNullable<ResolvedConfig["verify"]> }
@@ -309,6 +317,7 @@ const DEFAULT_TEMPLATES: PromptTemplates = {
     "  When you receive one, call ralph_respond(id, answer) to unblock the session.",
     "- Use ralph_doctor() to check setup, ralph_bootstrap_plan() to generate PLAN/TODOS,",
     "  ralph_create_supervisor_session() to bind/start explicitly, ralph_pause_supervision()/ralph_resume_supervision() to control execution, and ralph_end_supervision() to stop.",
+    "- Only call loop-control tools (spawn, pause, resume, end) after the supervisor session is bound via ralph_create_supervisor_session().",
     "- End supervision when verification has passed and the user confirms they are done, or when the user explicitly asks to stop the loop.",
     "- Optional reviewer flow: worker marks readiness with ralph_request_review(); supervisor runs ralph_run_reviewer().",
     "- Monitor progress in SUPERVISOR_LOG.md, CONVERSATION.md, or via toast notifications.",
@@ -500,6 +509,7 @@ const DEFAULT_TEMPLATES: PromptTemplates = {
     "- You do NOT write code yourself; you are not the RLM worker.",
     "- After reviewing state and optionally updating PLAN.md / RLM_INSTRUCTIONS.md,",
     "  call ralph_spawn_worker() to hand off to the RLM worker for this attempt.",
+    "- You MUST call ralph_spawn_worker() exactly once per attempt.",
     "- Then STOP. The plugin verifies independently and will spawn the next Ralph session if needed.",
     "",
     "Role boundaries:",
@@ -520,7 +530,7 @@ const DEFAULT_TEMPLATES: PromptTemplates = {
     "   guidance for the next worker based on patterns in the failures.",
     "5. Optionally call ralph_set_status('running', 'strategy finalized').",
     "6. Call ralph_report() summarizing strategy changes for this attempt.",
-    "7. Call ralph_spawn_worker() to delegate the coding work to a fresh RLM worker.",
+    "7. Call ralph_spawn_worker() to delegate the coding work to a fresh RLM worker (required).",
     "8. STOP — the plugin handles verification and will spawn attempt {{nextAttempt}} if needed.",
     "",
     "You do not write code. Your value is strategic context adjustment between attempts.",
@@ -529,6 +539,9 @@ const DEFAULT_TEMPLATES: PromptTemplates = {
     "- ralph_update_plan / ralph_update_rlm_instructions = durable strategy changes",
     "- ralph_spawn_worker = handoff to implementation session",
     "- ralph_report = visible summary for the supervisor",
+    "",
+    "Example flow:",
+    "- ralph_load_context() → ralph_report(\"Strategy: update PLAN.md with constraint X\") → ralph_spawn_worker() → STOP",
   ].join("\n"),
 };
 
@@ -821,6 +834,10 @@ type SupervisorState = {
   currentWorkerSessionId?: string | undefined;
   /** Timer guarding strategist → worker handoff. */
   ralphHandoffTimer?: ReturnType<typeof setTimeout> | undefined;
+  /** Retry counter for strategist handoff failures. */
+  ralphHandoffRetries?: number | undefined;
+  /** Attempt number associated with current handoff retries. */
+  ralphHandoffAttempt?: number | undefined;
   /** True once verification has passed — stops the loop. */
   done: boolean;
   /** Paused supervision: no automatic spawning while true. */
@@ -3132,7 +3149,7 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
       supervisor.ralphHandoffTimer = undefined;
     }
 
-      if (didUpdate && st) {
+    if (didUpdate && st) {
       await notifySupervisor(
         `${st.role}/attempt-${st.attempt}`,
         `${st.role} session ended (${reason}).`,
@@ -3251,6 +3268,8 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
     }
     const workerId = await spawnRlmWorker(st.attempt);
     mutateSession(sessionID, (s) => { s.workerSpawned = true; });
+    supervisor.ralphHandoffRetries = 0;
+    supervisor.ralphHandoffAttempt = st.attempt;
     await notifySupervisor(
       `ralph/attempt-${st.attempt}`,
       `Delegated coding to worker session ${workerId}.`,
@@ -3270,6 +3289,11 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
       body: { title: `ralph-strategist-attempt-${attempt}` },
     });
     const ralphId = result.data?.id ?? `ralph-${Date.now()}`;
+
+    if (supervisor.ralphHandoffAttempt !== attempt) {
+      supervisor.ralphHandoffAttempt = attempt;
+      supervisor.ralphHandoffRetries = 0;
+    }
 
     supervisor.currentRalphSessionId = ralphId;
     sessionMap.set(ralphId, freshSession("ralph", attempt));
@@ -3303,19 +3327,37 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
       clearTimeout(supervisor.ralphHandoffTimer);
     }
     const cfg = await run(getConfig());
-    const timeoutMs = Math.max(cfg.heartbeatMinutes, 1) * 60_000;
+    const timeoutMs = Math.max(cfg.strategistHandoffMinutes, 1) * 60_000;
     supervisor.ralphHandoffTimer = setTimeout(async () => {
       if (supervisor.done || supervisor.paused) return;
       if (supervisor.currentRalphSessionId !== ralphId) return;
       const st = sessionMap.get(ralphId);
       if (st?.workerSpawned) return;
+
+      const retries = supervisor.ralphHandoffRetries ?? 0;
+      if (retries < cfg.strategistHandoffMaxRetries) {
+        supervisor.ralphHandoffRetries = retries + 1;
+        await notifySupervisor(
+          `ralph/attempt-${attempt}`,
+          `Strategist did not hand off; retrying strategist (${retries + 1}/${cfg.strategistHandoffMaxRetries}).`,
+          "warning",
+          true,
+          ralphId
+        );
+        supervisor.currentRalphSessionId = undefined;
+        await client.session.abort({ path: { id: ralphId } }).catch(() => {});
+        await spawnRalphSession(attempt);
+        return;
+      }
+
       await notifySupervisor(
         `ralph/attempt-${attempt}`,
-        "Strategist did not hand off to a worker within the heartbeat window. Re-check prompt delivery or restart supervision.",
-        "warning",
+        "Strategist did not hand off after retries; supervision paused. Use ralph_create_supervisor_session(restart_if_done=true) to retry.",
+        "error",
         true,
         ralphId
       );
+      supervisor.paused = true;
     }, timeoutMs);
 
     await notifySupervisor(
