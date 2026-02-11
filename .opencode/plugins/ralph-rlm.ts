@@ -49,6 +49,9 @@
  * │ RALPH_BOOTSTRAP_CURRENT_STATE       │ Initial content written to CURRENT_STATE.md.           │
  * │ RALPH_CONTEXT_GATE_ERROR            │ Error thrown when destructive tool used without        │
  * │                                     │ calling ralph_load_context() first.                    │
+ * │ RALPH_WORKER_SYSTEM_PROMPT          │ System prompt injected into every RLM worker session.  │
+ * │ RALPH_WORKER_PROMPT                 │ Initial prompt sent to each spawned RLM worker.        │
+ * │                                     │ Tokens: {{attempt}}                                    │
  * └─────────────────────────────────────┴────────────────────────────────────────────────────────┘
  */
 
@@ -187,17 +190,26 @@ type PromptTemplates = {
   bootstrapCurrentState: string;
   /** Error message thrown when a destructive tool is used without loading context. */
   contextGateError: string;
+  /**
+   * System prompt injected into every spawned RLM worker session.
+   * Describes file-first discipline and the one-pass contract.
+   */
+  workerSystemPrompt: string;
+  /**
+   * Initial prompt sent to each spawned RLM worker session.
+   * Tokens: {{attempt}}
+   */
+  workerPrompt: string;
 };
 
 const DEFAULT_TEMPLATES: PromptTemplates = {
   systemPrompt: [
-    "FILE-FIRST PROTOCOL (Ralph + RLM):",
-    "- ALWAYS call ralph_load_context() at the start of every attempt before any other work.",
-    "- PLAN.md and RLM_INSTRUCTIONS.md are authoritative. Follow them.",
-    "- CONTEXT_FOR_RLM.md is large. Access it via rlm_grep + rlm_slice only. Never full-dump it.",
-    "- CURRENT_STATE.md is scratch for the current attempt. It will be rolled into PREVIOUS_STATE.md on rollover.",
-    "- NOTES_AND_LEARNINGS.md is append-only. Write durable insights here.",
-    "- Sub-agents: subagent_spawn to delegate, subagent_peek to inspect, subagent_await to collect.",
+    "RALPH SUPERVISOR:",
+    "- You are the Ralph supervisor. You orchestrate RLM worker sessions; you do NOT write code yourself.",
+    "- When the user gives you a goal, describe the task briefly and stop — the plugin will spawn an RLM worker automatically.",
+    "- Workers are spawned per-attempt with a fresh context window. They load state from protocol files.",
+    "- Protocol files (PLAN.md, RLM_INSTRUCTIONS.md, etc.) persist across all attempts — edit them to guide workers.",
+    "- After each worker attempt the plugin runs verify and either finishes or spawns the next worker.",
   ].join("\n"),
 
   systemPromptAppend: "",
@@ -301,6 +313,30 @@ const DEFAULT_TEMPLATES: PromptTemplates = {
 
   contextGateError:
     "File-first rule violated: call ralph_load_context() before using write / edit / bash.",
+
+  workerSystemPrompt: [
+    "FILE-FIRST PROTOCOL — RLM Worker:",
+    "- ALWAYS call ralph_load_context() before any other work. It contains everything you need.",
+    "- PLAN.md and RLM_INSTRUCTIONS.md are authoritative. Follow them.",
+    "- CONTEXT_FOR_RLM.md is large. Access via rlm_grep + rlm_slice only. Never full-dump it.",
+    "- CURRENT_STATE.md is scratch for this attempt. Write your progress here.",
+    "- NOTES_AND_LEARNINGS.md is append-only. Write durable insights here.",
+    "- When satisfied with your changes, call ralph_verify() once, then STOP.",
+    "  The Ralph supervisor evaluates the result and will spawn the next attempt if needed.",
+    "- Do NOT re-prompt yourself. One pass per session.",
+  ].join("\n"),
+
+  workerPrompt: [
+    "Ralph RLM worker — attempt {{attempt}}.",
+    "",
+    "Instructions:",
+    "1. Call ralph_load_context() FIRST. It contains PLAN.md, RLM_INSTRUCTIONS.md, previous state, and all context.",
+    "2. Read AGENT_CONTEXT_FOR_NEXT_RALPH.md for the verdict and next step from the previous attempt.",
+    "3. Follow RLM_INSTRUCTIONS.md for project-specific playbooks.",
+    "4. Do the work. Write progress to CURRENT_STATE.md throughout.",
+    "5. When done, call ralph_verify(). Then STOP — do not send further messages.",
+    "   The Ralph supervisor will handle the result and spawn attempt {{nextAttempt}} if needed.",
+  ].join("\n"),
 };
 
 /**
@@ -354,6 +390,8 @@ async function loadPromptTemplates(worktree: string): Promise<PromptTemplates> {
     bootstrapRlmInstructions,
     bootstrapCurrentState,
     contextGateError,
+    workerSystemPrompt,
+    workerPrompt,
   ] = await Promise.all([
     pick("RALPH_SYSTEM_PROMPT",              DEFAULT_TEMPLATES.systemPrompt),
     pick("RALPH_SYSTEM_PROMPT_APPEND",       DEFAULT_TEMPLATES.systemPromptAppend),
@@ -366,6 +404,8 @@ async function loadPromptTemplates(worktree: string): Promise<PromptTemplates> {
     pick("RALPH_BOOTSTRAP_RLM_INSTRUCTIONS", DEFAULT_TEMPLATES.bootstrapRlmInstructions),
     pick("RALPH_BOOTSTRAP_CURRENT_STATE",    DEFAULT_TEMPLATES.bootstrapCurrentState),
     pick("RALPH_CONTEXT_GATE_ERROR",         DEFAULT_TEMPLATES.contextGateError),
+    pick("RALPH_WORKER_SYSTEM_PROMPT",       DEFAULT_TEMPLATES.workerSystemPrompt),
+    pick("RALPH_WORKER_PROMPT",              DEFAULT_TEMPLATES.workerPrompt),
   ]);
 
   return {
@@ -380,6 +420,8 @@ async function loadPromptTemplates(worktree: string): Promise<PromptTemplates> {
     bootstrapRlmInstructions,
     bootstrapCurrentState,
     contextGateError,
+    workerSystemPrompt,
+    workerPrompt,
   };
 }
 
@@ -404,18 +446,42 @@ type SubAgentRecord = {
   result?: string;
 };
 
+/**
+ * Per-session state — applies to RLM worker sessions and any sub-agents they spawn.
+ * Ralph's own session does not use this (it uses SupervisorState instead).
+ */
 type SessionState = {
+  /** True for RLM worker sessions spawned by Ralph. False for sub-agents spawned by workers. */
+  isWorker: boolean;
+  /** Which Ralph attempt this session corresponds to (0 for sub-agents). */
+  workerAttempt: number;
+  /** Whether ralph_load_context() has been called this session. */
   loadedContext: boolean;
-  attempt: number;
-  lastIdleHandledAt?: number;
-  lastPluginPromptAt?: number;
-  lastGrepAt?: number;
-  lastGrepQuery?: string;
+  lastGrepAt?: number | undefined;
+  lastGrepQuery?: string | undefined;
+  /** Sub-agents spawned by this worker (if any). */
   subAgents: SubAgentRecord[];
 };
 
+/**
+ * Singleton supervisor state — one instance for the entire plugin lifetime.
+ * Ralph's session ID, attempt counter, and pointer to the current worker live here.
+ */
+type SupervisorState = {
+  /** Session ID of the Ralph supervisor session (set on first Ralph idle). */
+  sessionId?: string | undefined;
+  /** Global attempt counter. Increments before each worker spawn. */
+  attempt: number;
+  /** Session ID of the currently active RLM worker (undefined when no worker is running). */
+  currentWorkerSessionId?: string | undefined;
+  /** True once verification has passed — prevents spawning more workers. */
+  done: boolean;
+  /** Debounce timestamp for Ralph idle handler. */
+  lastRalphIdleAt?: number | undefined;
+};
+
 function freshSession(): SessionState {
-  return { loadedContext: false, attempt: 0, subAgents: [] };
+  return { isWorker: false, workerAttempt: 0, loadedContext: false, subAgents: [] };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -648,7 +714,10 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
       return value;
     });
 
-  // ── Session state (plain Map — bridged from Effect to sync access) ──────────
+  // ── Supervisor state (singleton for the Ralph session) ──────────────────────
+  const supervisor: SupervisorState = { attempt: 0, done: false };
+
+  // ── Session state (workers + sub-agents) ────────────────────────────────────
   const sessionMap = new Map<string, SessionState>();
 
   const getSession = (id: string): SessionState => {
@@ -730,6 +799,7 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
     async execute(args, ctx) {
       const root = ctx.worktree ?? worktree;
       const sessionID = ctx.sessionID ?? "default";
+      // Mark context loaded for both workers and sub-agents.
       mutateSession(sessionID, (s) => { s.loadedContext = true; });
       const st = getSession(sessionID);
       const cfg = await run(getConfig());
@@ -777,7 +847,12 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
               policy: "Use rlm_grep + rlm_slice to access this file. Never dump it fully.",
             },
             sub_agents: st.subAgents,
-            session: { attempt: st.attempt, loadedContext: st.loadedContext },
+            session: {
+              attempt: supervisor.attempt,
+              workerAttempt: st.workerAttempt,
+              isWorker: st.isWorker,
+              loadedContext: st.loadedContext,
+            },
           };
 
           // Include AGENT.md when found — surface project-level conventions to every
@@ -1189,58 +1264,65 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
   });
 
   // ────────────────────────────────────────────────────────────────────────────
-  // § 13. Outer loop: handleIdle
+  // § 13. Outer loop
   // ────────────────────────────────────────────────────────────────────────────
-  const handleIdle = async (sessionID: string): Promise<void> => {
-    const st = getSession(sessionID);
-    const cfg = await run(getConfig());
-    if (!cfg.enabled) return;
 
-    const now = Date.now();
-    if (st.lastIdleHandledAt && now - st.lastIdleHandledAt < 800) return;
-    mutateSession(sessionID, (s) => { s.lastIdleHandledAt = Date.now(); });
+  /**
+   * Spawn a new RLM worker session for the given attempt number.
+   * The worker receives a fresh context window and is sent a fire-and-forget
+   * prompt — Ralph does not wait for a response.
+   */
+  const spawnRlmWorker = async (attempt: number): Promise<void> => {
+    const result = await client.session.create({
+      body: { title: `rlm-worker-attempt-${attempt}` },
+    });
+    const workerId = result.data?.id ?? `worker-${Date.now()}`;
 
-    if (st.attempt >= cfg.maxAttempts) {
-      await client.tui.showToast({
-        body: {
-          title: "Ralph: stopped",
-          message: `Max attempts (${cfg.maxAttempts}) reached. Review AGENT_CONTEXT_FOR_NEXT_RALPH.md.`,
-          variant: "warning",
-        },
-      }).catch(() => {});
-      return;
-    }
+    // Register as worker BEFORE sending the prompt so the session.idle handler
+    // can correctly identify this session when it fires.
+    supervisor.currentWorkerSessionId = workerId;
+    sessionMap.set(workerId, {
+      isWorker: true,
+      workerAttempt: attempt,
+      loadedContext: false,
+      subAgents: [],
+    });
 
-    const verifyRaw = await run(runVerify(worktree));
-    let verdict: "pass" | "fail" | "unknown" = "unknown";
-    let details = "";
+    const promptText = interpolate(templates.workerPrompt, {
+      attempt: String(attempt),
+      nextAttempt: String(attempt + 1),
+    });
+
+    // Fire-and-forget — Ralph does not block waiting for the worker's response.
+    await client.session.promptAsync({
+      path: { id: workerId },
+      body: { parts: [{ type: "text", text: promptText }] },
+    }).catch(() => {});
+  };
+
+  /**
+   * Helper: run verify and parse the result into { verdict, details }.
+   */
+  const runAndParseVerify = async (): Promise<{ verdict: "pass" | "fail" | "unknown"; details: string }> => {
+    const raw = await run(runVerify(worktree));
     try {
-      const p = JSON.parse(verifyRaw);
-      verdict = p.verdict ?? "unknown";
-      details = p.error ? `${p.error}\n${p.output ?? ""}` : (p.output ?? "");
+      const p = JSON.parse(raw);
+      return {
+        verdict: (p.verdict ?? "unknown") as "pass" | "fail" | "unknown",
+        details: p.error ? `${p.error}\n${p.output ?? ""}` : (p.output ?? ""),
+      };
     } catch {
-      details = verifyRaw;
+      return { verdict: "unknown", details: raw };
     }
+  };
 
-    if (verdict === "pass") {
-      await run(
-        writeFile(
-          NodePath.join(worktree, FILES.NEXT_RALPH),
-          interpolate(templates.doneFileContent, { timestamp: nowISO() })
-        )
-      );
-      await client.tui.showToast({
-        body: { title: "Ralph: Done", message: "Verification passed. Loop complete.", variant: "success" },
-      }).catch(() => {});
-      return;
-    }
-
-    // Failed → rollover state files.
-    mutateSession(sessionID, (s) => { s.attempt += 1; });
-    const attemptN = getSession(sessionID).attempt;
+  /**
+   * Roll over state files after a failed attempt.
+   * CURRENT_STATE → PREVIOUS_STATE, reset CURRENT_STATE, write NEXT_RALPH shim.
+   */
+  const rolloverState = async (attemptN: number, verdict: string, details: string): Promise<void> => {
     const ts = nowISO();
     const summary = `Attempt ${attemptN} — verification ${verdict}.\n\n${clampLines(details, 120)}`;
-
     await run(
       Effect.gen(function* () {
         const curr = yield* readFile(NodePath.join(worktree, FILES.CURR)).pipe(Effect.orElseSucceed(() => ""));
@@ -1257,19 +1339,79 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
         );
       })
     );
+  };
 
-    // Re-prompt the agent.
-    const promptText = interpolate(templates.continuePrompt, {
-      attempt: String(attemptN),
-      verdict,
-    });
+  /**
+   * Called when an RLM worker session goes idle.
+   * Runs verify and either finishes the loop (pass) or spawns the next worker (fail).
+   */
+  const handleWorkerIdle = async (workerSessionId: string): Promise<void> => {
+    // Guard: only handle the current worker.
+    if (supervisor.currentWorkerSessionId !== workerSessionId) return;
+    if (supervisor.done) return;
 
-    await client.session.prompt({
-      path: { id: sessionID },
-      body: { parts: [{ type: "text", text: promptText }] },
-    }).catch(() => {});
+    const cfg = await run(getConfig());
+    if (!cfg.enabled) return;
 
-    mutateSession(sessionID, (s) => { s.lastPluginPromptAt = Date.now(); });
+    // Clear current worker pointer — it has finished its pass.
+    supervisor.currentWorkerSessionId = undefined;
+
+    const { verdict, details } = await runAndParseVerify();
+
+    if (verdict === "pass") {
+      supervisor.done = true;
+      await run(
+        writeFile(
+          NodePath.join(worktree, FILES.NEXT_RALPH),
+          interpolate(templates.doneFileContent, { timestamp: nowISO() })
+        )
+      );
+      await client.tui.showToast({
+        body: { title: "Ralph: Done", message: "Verification passed. Loop complete.", variant: "success" },
+      }).catch(() => {});
+      return;
+    }
+
+    // Fail — check attempt limit.
+    supervisor.attempt += 1;
+    if (supervisor.attempt > cfg.maxAttempts) {
+      await client.tui.showToast({
+        body: {
+          title: "Ralph: stopped",
+          message: `Max attempts (${cfg.maxAttempts}) reached. Review AGENT_CONTEXT_FOR_NEXT_RALPH.md.`,
+          variant: "warning",
+        },
+      }).catch(() => {});
+      return;
+    }
+
+    // Roll over state files then spawn the next worker.
+    await rolloverState(supervisor.attempt - 1, verdict, details);
+    await spawnRlmWorker(supervisor.attempt);
+  };
+
+  /**
+   * Called when the Ralph supervisor session goes idle.
+   * Kicks off attempt 1 if no worker is running and the loop has not completed.
+   */
+  const handleRalphIdle = async (sessionID: string): Promise<void> => {
+    if (supervisor.done) return;
+    if (supervisor.currentWorkerSessionId) return; // Worker already running.
+
+    const cfg = await run(getConfig());
+    if (!cfg.enabled) return;
+
+    // Debounce — ignore idle bursts within 800 ms.
+    const now = Date.now();
+    if (supervisor.lastRalphIdleAt && now - supervisor.lastRalphIdleAt < 800) return;
+    supervisor.lastRalphIdleAt = now;
+
+    // Record Ralph's session ID on first idle so we can identify it later.
+    if (!supervisor.sessionId) supervisor.sessionId = sessionID;
+
+    // Start the loop.
+    supervisor.attempt = 1;
+    await spawnRlmWorker(1);
   };
 
   // ────────────────────────────────────────────────────────────────────────────
@@ -1291,11 +1433,16 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
     },
 
     // ── System prompt injection ──────────────────────────────────────────────
-    "experimental.chat.system.transform": async (_input: any, output: any) => {
+    // Worker sessions get the RLM file-first protocol prompt.
+    // Ralph's session (and any other session) gets the supervisor prompt.
+    "experimental.chat.system.transform": async (input: any, output: any) => {
       output.system = output.system ?? [];
+      const sessionID: string | undefined = input.sessionID ?? input.session_id;
+      const isWorker = sessionMap.get(sessionID ?? "")?.isWorker === true;
+      const base = isWorker ? templates.workerSystemPrompt : templates.systemPrompt;
       const full = templates.systemPromptAppend
-        ? `${templates.systemPrompt}\n${templates.systemPromptAppend}`
-        : templates.systemPrompt;
+        ? `${base}\n${templates.systemPromptAppend}`
+        : base;
       output.system.push(full);
     },
 
@@ -1305,7 +1452,9 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
       output.context.push(templates.compactionContext);
     },
 
-    // ── Tool gating ──────────────────────────────────────────────────────────
+    // ── Tool gating (worker sessions only) ───────────────────────────────────
+    // The gate only applies to RLM workers. Ralph's session is not gated
+    // (Ralph doesn't do coding; gating it would block sub-agent tools needlessly).
     "tool.execute.before": async (input: any, _output: any) => {
       const cfg = await run(getConfig());
       if (!cfg.gateDestructiveToolsUntilContextLoaded) return;
@@ -1314,13 +1463,15 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
         input.sessionID ?? input.session_id ?? input.session?.id;
       if (!sessionID) return;
 
+      const state = sessionMap.get(sessionID);
+      if (!state?.isWorker) return; // Only gate worker sessions.
+
       const toolName: string = input.tool ?? input.call?.name ?? "";
       if (!toolName) return;
-
       if (SAFE_TOOLS.has(toolName)) return;
       if (!DESTRUCTIVE_TOOLS.has(toolName)) return;
 
-      if (!getSession(sessionID).loadedContext) {
+      if (!state.loadedContext) {
         throw new Error(templates.contextGateError);
       }
     },
@@ -1331,13 +1482,23 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
         event?.sessionID ?? event?.session_id ?? event?.session?.id;
 
       if (event?.type === "session.created" && sessionID) {
-        getSession(sessionID);
+        // Pre-allocate session state for known workers; others will be lazy-init'd.
+        if (sessionMap.has(sessionID)) getSession(sessionID);
       }
 
       if (event?.type === "session.idle" && sessionID) {
-        await handleIdle(sessionID).catch((err: unknown) => {
-          console.error("[ralph-rlm] handleIdle error:", err);
-        });
+        if (supervisor.currentWorkerSessionId === sessionID) {
+          // An RLM worker went idle — evaluate and continue the loop.
+          await handleWorkerIdle(sessionID).catch((err: unknown) => {
+            console.error("[ralph-rlm] handleWorkerIdle error:", err);
+          });
+        } else {
+          // Ralph's session (or another unrelated session) went idle.
+          // Start the loop if it hasn't started yet.
+          await handleRalphIdle(sessionID).catch((err: unknown) => {
+            console.error("[ralph-rlm] handleRalphIdle error:", err);
+          });
+        }
       }
     },
   };

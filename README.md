@@ -2,24 +2,44 @@
 
 An [OpenCode](https://opencode.ai) plugin that implements two interlocking AI loop techniques:
 
-- **Ralph** (outer loop) — a supervisor that watches for session idle, runs your verification command, and automatically re-prompts the agent to keep working until the build is green or a max-attempt limit is hit.
-- **RLM** (inner loop) — a file-first agent discipline based on [Recursive Language Models](https://arxiv.org/abs/2512.24601), where the agent is forced to load context from files, grep before reading, and write durable state back to files rather than relying on context window memory.
+- **Ralph** (supervisor) — a persistent session that watches for idle events, runs your verification command, and spawns fresh RLM worker sessions until the build is green or a max-attempt limit is hit.
+- **RLM** (worker) — a file-first agent discipline based on [Recursive Language Models](https://arxiv.org/abs/2512.24601), where each attempt gets a **fresh context window** that loads state from files rather than accumulating noise across turns.
 
 The combination lets you walk away from a task and come back to working code.
 
 ## How it works
 
-### The outer loop (Ralph)
+### Multi-agent architecture
 
-1. Agent finishes a turn → session goes idle → plugin fires.
-2. Plugin runs your `verify` command (tests, typecheck, lint — whatever you configure).
-3. **Pass** → writes a DONE marker to `AGENT_CONTEXT_FOR_NEXT_RALPH.md`, shows a toast, stops.
-4. **Fail** → rolls `CURRENT_STATE.md` into `PREVIOUS_STATE.md`, resets scratch, writes a compact failure summary to `AGENT_CONTEXT_FOR_NEXT_RALPH.md`, then injects a continue prompt back into the session.
-5. Repeat up to `maxAttempts`.
+```
+You → Ralph session (supervisor, persistent)
+         │
+         ├─ attempt 1: spawns RLM worker session  ← fresh context window
+         │    └─ worker: ralph_load_context() → code → ralph_verify() → stop
+         │
+         ├─ Ralph runs verify independently on worker idle
+         │    fail → roll state files → spawn attempt 2
+         │
+         ├─ attempt 2: spawns new RLM worker session  ← fresh context again
+         │    └─ worker: loads compact state from files → code → stop
+         │
+         └─ pass → done toast
+```
 
-### The inner loop (RLM)
+Each RLM worker session:
+- Receives a **fresh context window** — no accumulated noise from prior attempts
+- Loads all context from the protocol files via `ralph_load_context()`
+- Does **one pass**: load → code → verify → stop
+- Never re-prompts itself — Ralph controls iteration
 
-Each attempt the agent is required to:
+Ralph's session:
+- Never writes code itself
+- Manages the protocol files between attempts (rollover, context shim)
+- Spawns the next worker after each failed attempt
+
+### The RLM worker discipline
+
+Each worker session is required to:
 
 1. Call `ralph_load_context()` first — blocked from write/edit/bash until it does.
 2. Read `PLAN.md` and `RLM_INSTRUCTIONS.md` as authoritative instructions.
@@ -27,11 +47,11 @@ Each attempt the agent is required to:
 4. Write scratch work to `CURRENT_STATE.md`.
 5. Promote durable changes (completed milestones, new constraints) to `PLAN.md`.
 6. Append insights to `NOTES_AND_LEARNINGS.md`.
-7. Call `ralph_verify()` when ready.
+7. Call `ralph_verify()` when ready, then stop.
 
 ### Sub-agents
 
-For tasks that can be decomposed, the agent can `subagent_spawn` a child session with an isolated goal. Each sub-agent gets its own state directory under `.opencode/agents/<name>/`. The parent polls with `subagent_await` and integrates the result.
+For tasks that can be decomposed, a worker can `subagent_spawn` a child session with an isolated goal. Each sub-agent gets its own state directory under `.opencode/agents/<name>/`. The worker polls with `subagent_await` and integrates the result.
 
 
 ## Install
@@ -305,6 +325,8 @@ RALPH_BOOTSTRAP_RLM_INSTRUCTIONS="@/home/user/prompts/rlm-instructions.md"
 | `RALPH_BOOTSTRAP_RLM_INSTRUCTIONS` | `{{timestamp}}` | Initial content written to `RLM_INSTRUCTIONS.md` when it does not exist. |
 | `RALPH_BOOTSTRAP_CURRENT_STATE` | — | Template written to `CURRENT_STATE.md` on bootstrap and after each rollover. |
 | `RALPH_CONTEXT_GATE_ERROR` | — | Error message thrown when the agent tries a destructive tool before loading context. |
+| `RALPH_WORKER_SYSTEM_PROMPT` | — | System prompt injected into every RLM worker session. Describes the one-pass contract. |
+| `RALPH_WORKER_PROMPT` | `{{attempt}}` | Initial prompt sent to each spawned RLM worker session. |
 
 ### Example: custom continue prompt from a file
 
@@ -368,11 +390,11 @@ Edit `RLM_INSTRUCTIONS.md` to add project-specific playbooks, register MCP tools
 
 | Hook | What it does |
 |---|---|
-| `event: session.idle` | Fires the outer Ralph loop after each idle. |
-| `event: session.created` | Pre-allocates session state. |
-| `experimental.chat.system.transform` | Injects the file-first protocol rules into every system prompt. |
+| `event: session.idle` | Routes to `handleWorkerIdle` (spawned workers) or `handleRalphIdle` (supervisor) based on session ID. |
+| `event: session.created` | Pre-allocates session state for known worker sessions. |
+| `experimental.chat.system.transform` | Injects the RLM worker system prompt into worker sessions; the Ralph supervisor prompt into all other sessions. |
 | `experimental.session.compacting` | Injects protocol file pointers into compaction context so state survives context compression. |
-| `tool.execute.before` | Blocks destructive tools (`write`, `edit`, `bash`, `delete`, `move`, `rename`) until `ralph_load_context()` has been called. |
+| `tool.execute.before` | Blocks destructive tools (`write`, `edit`, `bash`, `delete`, `move`, `rename`) in **worker sessions** until `ralph_load_context()` has been called. Ralph's session is not gated. |
 
 
 ## Background
