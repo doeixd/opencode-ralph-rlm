@@ -83,6 +83,7 @@ const RalphConfigSchema = Schema.Struct({
   statusVerbosity: Schema.optional(Schema.Union(Schema.Literal("minimal"), Schema.Literal("normal"), Schema.Literal("verbose"))),
   maxAttempts: Schema.optional(Schema.Number),
   heartbeatMinutes: Schema.optional(Schema.Number),
+  verifyTimeoutMinutes: Schema.optional(Schema.Number),
   verify: Schema.optional(VerifyConfigSchema),
   gateDestructiveToolsUntilContextLoaded: Schema.optional(Schema.Boolean),
   maxRlmSliceLines: Schema.optional(Schema.Number),
@@ -117,6 +118,7 @@ type ResolvedConfig = {
   statusVerbosity: "minimal" | "normal" | "verbose";
   maxAttempts: number;
   heartbeatMinutes: number;
+  verifyTimeoutMinutes: number;
   verify?: { command: string[]; cwd?: string };
   gateDestructiveToolsUntilContextLoaded: boolean;
   maxRlmSliceLines: number;
@@ -165,6 +167,7 @@ const CONFIG_DEFAULTS: ResolvedConfig = {
   statusVerbosity: "normal",
   maxAttempts: 20,
   heartbeatMinutes: 15,
+  verifyTimeoutMinutes: 0,
   gateDestructiveToolsUntilContextLoaded: true,
   maxRlmSliceLines: 200,
   requireGrepBeforeLargeSlice: true,
@@ -197,6 +200,7 @@ function resolveConfig(raw: RalphConfig): ResolvedConfig {
     statusVerbosity: raw.statusVerbosity ?? CONFIG_DEFAULTS.statusVerbosity,
     maxAttempts: toBoundedInt(raw.maxAttempts, CONFIG_DEFAULTS.maxAttempts, 1, 500),
     heartbeatMinutes: toBoundedInt(raw.heartbeatMinutes, CONFIG_DEFAULTS.heartbeatMinutes, 1, 240),
+    verifyTimeoutMinutes: toBoundedInt(raw.verifyTimeoutMinutes, CONFIG_DEFAULTS.verifyTimeoutMinutes, 0, 240),
     ...(verify !== undefined
       ? { verify: verify as NonNullable<ResolvedConfig["verify"]> }
       : {}),
@@ -614,9 +618,36 @@ const writePendingInput = async (root: string, data: PendingInputData): Promise<
 
 const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 
+type ActiveCommand = {
+  child: ReturnType<typeof spawn>;
+  label: string;
+  startedAt: number;
+  timedOut: boolean;
+  timeoutTimer?: ReturnType<typeof setTimeout> | undefined;
+  killTimer?: ReturnType<typeof setTimeout> | undefined;
+};
+
+const activeCommands = new Set<ActiveCommand>();
+
+const stopCommand = (cmd: ActiveCommand, reason: string): void => {
+  if (cmd.child.killed) return;
+  cmd.timedOut = cmd.timedOut || reason === "timeout";
+  try { cmd.child.kill(); } catch {}
+  cmd.killTimer = setTimeout(() => {
+    try { cmd.child.kill("SIGKILL"); } catch {}
+  }, 2000);
+};
+
+const stopAllCommands = (reason: string): void => {
+  for (const cmd of activeCommands) {
+    stopCommand(cmd, reason);
+  }
+};
+
 async function runCommand(
   command: string[],
-  cwd: string
+  cwd: string,
+  options?: { timeoutMs?: number; label?: string }
 ): Promise<{ ok: boolean; code: number | null; stdout: string; stderr: string }> {
   return await new Promise((resolve) => {
     const child = spawn(command[0] ?? "", command.slice(1), {
@@ -628,6 +659,19 @@ async function runCommand(
 
     let stdout = "";
     let stderr = "";
+    const entry: ActiveCommand = {
+      child,
+      label: options?.label ?? command.join(" "),
+      startedAt: Date.now(),
+      timedOut: false,
+    };
+    activeCommands.add(entry);
+
+    if (options?.timeoutMs && options.timeoutMs > 0) {
+      entry.timeoutTimer = setTimeout(() => {
+        stopCommand(entry, "timeout");
+      }, options.timeoutMs);
+    }
 
     child.stdout?.on("data", (chunk) => {
       stdout += String(chunk);
@@ -637,11 +681,18 @@ async function runCommand(
     });
 
     child.on("error", (err) => {
+      if (entry.timeoutTimer) clearTimeout(entry.timeoutTimer);
+      if (entry.killTimer) clearTimeout(entry.killTimer);
+      activeCommands.delete(entry);
       resolve({ ok: false, code: null, stdout, stderr: `${stderr}\n${String(err)}`.trim() });
     });
 
     child.on("close", (code) => {
-      resolve({ ok: code === 0, code, stdout, stderr });
+      if (entry.timeoutTimer) clearTimeout(entry.timeoutTimer);
+      if (entry.killTimer) clearTimeout(entry.killTimer);
+      activeCommands.delete(entry);
+      const timeoutNote = entry.timedOut ? "\n[ralph] command timed out" : "";
+      resolve({ ok: code === 0 && !entry.timedOut, code, stdout, stderr: `${stderr}${timeoutNote}`.trim() });
     });
   });
 }
@@ -1346,9 +1397,15 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
       }
       const verifyCmd = cfg.verify.command;
       const cwd = NodePath.join(root, cfg.verify.cwd ?? ".");
+      const timeoutMs = cfg.verifyTimeoutMinutes > 0
+        ? cfg.verifyTimeoutMinutes * 60_000
+        : null;
       return yield* Effect.tryPromise({
         try: async () => {
-          const result = await runCommand(verifyCmd, cwd);
+          const options = timeoutMs
+            ? { timeoutMs, label: "verify" }
+            : { label: "verify" };
+          const result = await runCommand(verifyCmd, cwd, options);
           if (result.ok) {
             return JSON.stringify({ verdict: "pass", output: result.stdout }, null, 2);
           }
@@ -2349,6 +2406,10 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
       "Stop Ralph supervision for this process. Prevents further auto-loop orchestration until restarted.",
     args: {
       reason: tool.schema.string().optional().describe("Optional reason for ending supervision."),
+      delete_sessions: tool.schema
+        .boolean()
+        .optional()
+        .describe("Also delete child sessions after aborting them (default false)."),
       clear_binding: tool.schema
         .boolean()
         .optional()
@@ -2360,6 +2421,15 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
 
       supervisor.done = true;
       supervisor.paused = true;
+      const sessionsToAbort = Array.from(sessionMap.keys());
+      for (const id of sessionsToAbort) {
+        await client.session.abort({ path: { id } }).catch(() => {});
+        if (args.delete_sessions) {
+          await client.session.delete({ path: { id } }).catch(() => {});
+        }
+      }
+      stopAllCommands("supervision-ended");
+      sessionMap.clear();
       supervisor.currentRalphSessionId = undefined;
       supervisor.currentWorkerSessionId = undefined;
       supervisor.activeReviewerName = undefined;
@@ -2903,6 +2973,7 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
   // ────────────────────────────────────────────────────────────────────────────
 
   const emitHeartbeatWarnings = async (): Promise<void> => {
+    if (supervisor.done || supervisor.paused) return;
     const cfg = await run(getConfig());
     const thresholdMs = cfg.heartbeatMinutes * 60_000;
     const now = Date.now();
@@ -2926,6 +2997,39 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
 
     await maybeWarn(supervisor.currentRalphSessionId, "Strategist");
     await maybeWarn(supervisor.currentWorkerSessionId, "Worker");
+  };
+
+  const clearSessionTracking = async (sessionId: string, reason: string): Promise<void> => {
+    const st = sessionMap.get(sessionId);
+    sessionMap.delete(sessionId);
+
+    let didUpdate = false;
+    if (supervisor.currentRalphSessionId === sessionId) {
+      supervisor.currentRalphSessionId = undefined;
+      didUpdate = true;
+    }
+    if (supervisor.currentWorkerSessionId === sessionId) {
+      supervisor.currentWorkerSessionId = undefined;
+      didUpdate = true;
+    }
+    if (supervisor.activeReviewerSessionId === sessionId) {
+      supervisor.activeReviewerSessionId = undefined;
+      supervisor.activeReviewerName = undefined;
+      supervisor.activeReviewerAttempt = undefined;
+      supervisor.activeReviewerOutputPath = undefined;
+      didUpdate = true;
+      await persistReviewerState();
+    }
+
+    if (didUpdate && st) {
+      await notifySupervisor(
+        `${st.role}/attempt-${st.attempt}`,
+        `${st.role} session ended (${reason}).`,
+        "info",
+        true,
+        sessionId
+      );
+    }
   };
 
   /** Helper: run verify and parse the result into { verdict, details }. */
@@ -3328,7 +3432,10 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
       }
 
       if (event?.type === "session.status" && sessionID) {
+        if (supervisor.done || supervisor.paused) return;
         const state = sessionMap.get(sessionID);
+        if (state?.role === "worker" && supervisor.currentWorkerSessionId !== sessionID) return;
+        if (state?.role === "ralph" && supervisor.currentRalphSessionId !== sessionID) return;
         if (state) {
           mutateSession(sessionID, (s) => { s.lastProgressAt = Date.now(); });
           const statusRaw = String(event?.status ?? event?.data?.status ?? "").toLowerCase();
@@ -3345,6 +3452,7 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
       }
 
       if (event?.type === "session.idle" && sessionID) {
+        if (supervisor.done || supervisor.paused) return;
         await emitHeartbeatWarnings().catch((err: unknown) => {
           void appLog("error", "heartbeat warning error", { error: String(err) });
         });
@@ -3365,6 +3473,10 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
             void appLog("error", "handleMainIdle error", { error: String(err), sessionID });
           });
         }
+      }
+
+      if (sessionID && (event?.type === "session.closed" || event?.type === "session.ended" || event?.type === "session.deleted")) {
+        await clearSessionTracking(sessionID, event.type);
       }
     },
   };

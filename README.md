@@ -221,7 +221,8 @@ Create `.opencode/ralph.json`. All fields are optional — the plugin runs with 
 | `statusVerbosity` | `"normal"` | Supervisor status emission level: `minimal` (warnings/errors), `normal`, or `verbose`. |
 | `maxAttempts` | `20` | Hard stop after this many failed verify attempts. |
 | `heartbeatMinutes` | `15` | Warn if active strategist/worker has no progress for this many minutes. |
-| `verify.command` | — | Shell command to run as an array, e.g. `["bun", "run", "verify"]`. If omitted, verify always returns `unknown`. |
+| `verifyTimeoutMinutes` | `0` | Timeout for verify command in minutes. `0` disables timeouts. |
+| `verify.command` | - | Shell command to run as an array, e.g. `["bun", "run", "verify"]`. If omitted, verify always returns `unknown`. |
 | `verify.cwd` | `"."` | Working directory for the verify command, relative to the repo root. |
 | `gateDestructiveToolsUntilContextLoaded` | `true` | Block `write`, `edit`, `bash`, etc. until `ralph_load_context()` has been called in the current attempt. |
 | `maxRlmSliceLines` | `200` | Maximum lines a single `rlm_slice` call may return. |
@@ -439,6 +440,8 @@ Stop supervision for the current process. This prevents further auto-loop orches
 
 - Use this when you want to pause/stop Ralph from spawning more sessions.
 - Use this after verification passes and the user confirms they are done, or when the user asks to stop the loop.
+- Active child sessions are aborted and any running verify command is stopped.
+- Pass `delete_sessions: true` to delete child sessions after aborting them.
 - Resume later with `ralph_create_supervisor_session(restart_if_done=true)`.
 
 #### `ralph_supervision_status()`

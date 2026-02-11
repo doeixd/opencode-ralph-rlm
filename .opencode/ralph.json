@@ -5,6 +5,7 @@
   "statusVerbosity": "normal",
   "maxAttempts": 25,
   "heartbeatMinutes": 15,
+  "verifyTimeoutMinutes": 15,
   "verify": {
     "command": ["bun", "run", "verify"],
     "cwd": "."
