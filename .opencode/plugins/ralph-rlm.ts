@@ -318,6 +318,21 @@ const DEFAULT_TEMPLATES: PromptTemplates = {
     "- All implementation happens in RLM worker sessions spawned per attempt.",
     "- Strategy changes must be written to PLAN.md / RLM_INSTRUCTIONS.md so each new worker sees them.",
     "- Stop the loop explicitly with ralph_end_supervision() when the user is done or verification passed.",
+    "",
+    "Onboarding checklist (supervisor):",
+    "- If setup is incomplete, run ralph_doctor(autofix=true).",
+    "- If PLAN.md is missing or weak, run ralph_quickstart_wizard(...) or ralph_bootstrap_plan(...) + ralph_validate_plan().",
+    "- Start supervision with ralph_create_supervisor_session(start_loop=true) unless autoStartOnMainIdle is enabled.",
+    "- Use ralph_supervision_status() to confirm current attempt and active sessions.",
+    "",
+    "Protocol files (purpose):",
+    "- PLAN.md: goals, milestones, definition of done (authoritative).",
+    "- RLM_INSTRUCTIONS.md: inner loop operating manual (authoritative, updated between attempts).",
+    "- CURRENT_STATE.md: scratch for the current attempt only.",
+    "- PREVIOUS_STATE.md: snapshot of last attempt's scratch.",
+    "- NOTES_AND_LEARNINGS.md: durable learnings across attempts.",
+    "- CONVERSATION.md / SUPERVISOR_LOG.md: status feed and timeline for the supervisor.",
+    "- CONTEXT_FOR_RLM.md: large reference; workers must use rlm_grep/rlm_slice.",
   ].join("\n"),
 
   systemPromptAppend: "",
@@ -333,6 +348,11 @@ const DEFAULT_TEMPLATES: PromptTemplates = {
     "- CONVERSATION.md                 — append-only supervisor-visible status feed",
     "- CONTEXT_FOR_RLM.md              — large reference; access via rlm_grep + rlm_slice",
     "- .opencode/agents/<name>/        — sub-agent state directories",
+    "",
+    "## Loop control",
+    "- ralph_create_supervisor_session(start_loop=true) to start",
+    "- ralph_pause_supervision() / ralph_resume_supervision() to pause/resume",
+    "- ralph_end_supervision() to stop and clean up",
   ].join("\n"),
 
   continuePrompt: [
@@ -799,6 +819,8 @@ type SupervisorState = {
   currentRalphSessionId?: string | undefined;
   /** Session ID of the current RLM worker session. */
   currentWorkerSessionId?: string | undefined;
+  /** Timer guarding strategist → worker handoff. */
+  ralphHandoffTimer?: ReturnType<typeof setTimeout> | undefined;
   /** True once verification has passed — stops the loop. */
   done: boolean;
   /** Paused supervision: no automatic spawning while true. */
@@ -1265,6 +1287,46 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
         path: { id: supervisor.sessionId },
         body: { parts: [{ type: "text", text: `[${source}] ${message}` }] },
       }).catch(() => {});
+    }
+  };
+
+  const sendPromptWithFallback = async (
+    sessionId: string,
+    text: string,
+    label: string,
+    originSessionId?: string
+  ): Promise<boolean> => {
+    try {
+      await client.session.promptAsync({
+        path: { id: sessionId },
+        body: { parts: [{ type: "text", text }] },
+      });
+      return true;
+    } catch (err) {
+      await notifySupervisor(
+        "supervisor",
+        `${label} promptAsync failed: ${err instanceof Error ? err.message : String(err)}`,
+        "warning",
+        true,
+        originSessionId
+      );
+    }
+
+    try {
+      await client.session.prompt({
+        path: { id: sessionId },
+        body: { parts: [{ type: "text", text }] },
+      });
+      return true;
+    } catch (err) {
+      await notifySupervisor(
+        "supervisor",
+        `${label} prompt fallback failed: ${err instanceof Error ? err.message : String(err)}`,
+        "error",
+        true,
+        originSessionId
+      );
+      return false;
     }
   };
 
@@ -2476,6 +2538,11 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
       supervisor.activeReviewerOutputPath = undefined;
       await persistReviewerState();
 
+      if (supervisor.ralphHandoffTimer) {
+        clearTimeout(supervisor.ralphHandoffTimer);
+        supervisor.ralphHandoffTimer = undefined;
+      }
+
       if (args.clear_binding === true) {
         supervisor.sessionId = undefined;
       }
@@ -3042,7 +3109,8 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
     sessionMap.delete(sessionId);
 
     let didUpdate = false;
-    if (supervisor.currentRalphSessionId === sessionId) {
+    const clearedRalph = supervisor.currentRalphSessionId === sessionId;
+    if (clearedRalph) {
       supervisor.currentRalphSessionId = undefined;
       didUpdate = true;
     }
@@ -3059,7 +3127,12 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
       await persistReviewerState();
     }
 
-    if (didUpdate && st) {
+    if (supervisor.ralphHandoffTimer && clearedRalph) {
+      clearTimeout(supervisor.ralphHandoffTimer);
+      supervisor.ralphHandoffTimer = undefined;
+    }
+
+      if (didUpdate && st) {
       await notifySupervisor(
         `${st.role}/attempt-${st.attempt}`,
         `${st.role} session ended (${reason}).`,
@@ -3126,10 +3199,28 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
       nextAttempt: String(attempt + 1),
     });
 
-    await client.session.promptAsync({
-      path: { id: workerId },
-      body: { parts: [{ type: "text", text: promptText }] },
-    }).catch(() => {});
+    const promptOk = await sendPromptWithFallback(
+      workerId,
+      promptText,
+      `Worker prompt (attempt ${attempt})`,
+      workerId
+    );
+    if (!promptOk) {
+      mutateSession(workerId, (s) => {
+        s.reportedStatus = "error";
+        s.reportedStatusNote = "Worker prompt failed";
+      });
+      supervisor.currentWorkerSessionId = undefined;
+      await client.session.abort({ path: { id: workerId } }).catch(() => {});
+      await notifySupervisor(
+        `worker/attempt-${attempt}`,
+        "Worker prompt failed; supervision paused. Retry with ralph_create_supervisor_session(restart_if_done=true).",
+        "error",
+        true
+      );
+      supervisor.paused = true;
+      throw new Error("Worker prompt failed");
+    }
 
     await notifySupervisor(
       `supervisor/attempt-${attempt}`,
@@ -3154,8 +3245,12 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
       throw new Error("ralph_spawn_worker() has already been called for this attempt.");
     }
 
-    mutateSession(sessionID, (s) => { s.workerSpawned = true; });
+    if (supervisor.ralphHandoffTimer) {
+      clearTimeout(supervisor.ralphHandoffTimer);
+      supervisor.ralphHandoffTimer = undefined;
+    }
     const workerId = await spawnRlmWorker(st.attempt);
+    mutateSession(sessionID, (s) => { s.workerSpawned = true; });
     await notifySupervisor(
       `ralph/attempt-${st.attempt}`,
       `Delegated coding to worker session ${workerId}.`,
@@ -3185,10 +3280,43 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
       nextAttempt: String(attempt + 1),
     });
 
-    await client.session.promptAsync({
-      path: { id: ralphId },
-      body: { parts: [{ type: "text", text: promptText }] },
-    }).catch(() => {});
+    const promptOk = await sendPromptWithFallback(
+      ralphId,
+      promptText,
+      `Strategist prompt (attempt ${attempt})`,
+      ralphId
+    );
+    if (!promptOk) {
+      supervisor.currentRalphSessionId = undefined;
+      await client.session.abort({ path: { id: ralphId } }).catch(() => {});
+      await notifySupervisor(
+        `supervisor/attempt-${attempt}`,
+        "Strategist prompt failed; supervision paused. Retry with ralph_create_supervisor_session(restart_if_done=true).",
+        "error",
+        true
+      );
+      supervisor.paused = true;
+      return;
+    }
+
+    if (supervisor.ralphHandoffTimer) {
+      clearTimeout(supervisor.ralphHandoffTimer);
+    }
+    const cfg = await run(getConfig());
+    const timeoutMs = Math.max(cfg.heartbeatMinutes, 1) * 60_000;
+    supervisor.ralphHandoffTimer = setTimeout(async () => {
+      if (supervisor.done || supervisor.paused) return;
+      if (supervisor.currentRalphSessionId !== ralphId) return;
+      const st = sessionMap.get(ralphId);
+      if (st?.workerSpawned) return;
+      await notifySupervisor(
+        `ralph/attempt-${attempt}`,
+        "Strategist did not hand off to a worker within the heartbeat window. Re-check prompt delivery or restart supervision.",
+        "warning",
+        true,
+        ralphId
+      );
+    }, timeoutMs);
 
     await notifySupervisor(
       `supervisor/attempt-${attempt}`,
@@ -3416,7 +3544,7 @@ export const RalphRLM: Plugin = async ({ client, $, worktree }) => {
     //   main / other → supervisor prompt (shown to the user's session)
     "experimental.chat.system.transform": async (input: any, output: any) => {
       output.system = output.system ?? [];
-      const sessionID: string | undefined = input.sessionID ?? input.session_id;
+      const sessionID: string | undefined = input.sessionID ?? input.session_id ?? input.session?.id;
       const role = sessionMap.get(sessionID ?? "")?.role;
       const base =
         role === "worker" || role === "subagent" ? templates.workerSystemPrompt :
