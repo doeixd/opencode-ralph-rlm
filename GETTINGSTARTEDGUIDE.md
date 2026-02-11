@@ -39,6 +39,17 @@ Check status anytime:
 
 `ralph_supervision_status()`
 
+## 4.5) Use the included agent profiles (recommended)
+
+This repo includes project-local OpenCode agent profiles in `.opencode/agents/`:
+
+- `supervisor` (primary): safe orchestration posture for Ralph loop control
+- `ralph-reviewer` (subagent): read-only quality review
+- `docs-writer` (subagent): documentation edits without shell access
+- `security-auditor` (subagent): read-only security-focused review
+
+Use these to control behavior and delegation while keeping loop execution in the plugin.
+
 ## 5) Monitor progress
 
 - Structured feed: `SUPERVISOR_LOG.md`

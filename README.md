@@ -265,6 +265,28 @@ If you are setting up a repo from scratch, use this sequence:
 
 If setup is incomplete, auto-start is skipped and the plugin emits a warning with next actions.
 
+## Recommended OpenCode agent setup
+
+The plugin already manages the core loop roles (`main` / `ralph` / `worker` / `subagent`).
+Use OpenCode agents to control posture and delegation, not to replace loop orchestration.
+
+Recommended split:
+
+- `supervisor` (primary): your default top-level operator for safe orchestration.
+- built-in `plan` (primary): dry analysis/planning without edits.
+- built-in `build` (primary): full manual implementation when needed.
+- project subagents (optional): focused review/docs/security helpers.
+
+This repo now includes project-local agent files under `.opencode/agents/`:
+
+- `.opencode/agents/supervisor.md`
+- `.opencode/agents/ralph-reviewer.md`
+- `.opencode/agents/docs-writer.md`
+- `.opencode/agents/security-auditor.md`
+
+These profiles intentionally keep loop ownership in `ralph-rlm`.
+Do not model Ralph strategist/worker as OpenCode primary/subagent replacements.
+
 
 ## Protocol files
 
