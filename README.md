@@ -2,29 +2,47 @@
 
 An [OpenCode](https://opencode.ai) plugin that implements two interlocking AI loop techniques:
 
-- **Ralph** (supervisor) — a persistent session that watches for idle events, runs your verification command, and spawns fresh RLM worker sessions until the build is green or a max-attempt limit is hit.
+- **Ralph** (strategist) — a fresh session spawned per attempt that reviews failures, updates protocol files, and delegates coding to an RLM worker via `ralph_spawn_worker()`.
 - **RLM** (worker) — a file-first agent discipline based on [Recursive Language Models](https://arxiv.org/abs/2512.24601), where each attempt gets a **fresh context window** that loads state from files rather than accumulating noise across turns.
 
 The combination lets you walk away from a task and come back to working code.
 
 ## How it works
 
-### Multi-agent architecture
+### Three-level multi-agent architecture
 
 ```
-You → Ralph session (supervisor, persistent)
+You → main session (thin meta-supervisor — your conversation)
          │
-         ├─ attempt 1: spawns RLM worker session  ← fresh context window
-         │    └─ worker: ralph_load_context() → code → ralph_verify() → stop
+         ├─ attempt 1:
+         │    ├─ spawns Ralph strategist session R1  ← fresh context
+         │    │    R1: ralph_load_context() → review failures → update PLAN.md
+         │    │        → ralph_spawn_worker() → STOP
+         │    │
+         │    └─ spawns RLM worker session W1  ← fresh context
+         │         W1: ralph_load_context() → code → ralph_verify() → STOP
          │
-         ├─ Ralph runs verify independently on worker idle
+         ├─ plugin verifies on W1 idle
          │    fail → roll state files → spawn attempt 2
          │
-         ├─ attempt 2: spawns new RLM worker session  ← fresh context again
-         │    └─ worker: loads compact state from files → code → stop
+         ├─ attempt 2:
+         │    ├─ spawns Ralph strategist session R2  ← fresh context again
+         │    │    R2: reads AGENT_CONTEXT_FOR_NEXT_RALPH.md → adjusts strategy
+         │    │        → ralph_spawn_worker() → STOP
+         │    │
+         │    └─ spawns RLM worker session W2  ← fresh context
+         │         W2: loads compact state from files → code → STOP
          │
          └─ pass → done toast
 ```
+
+Each session role has a distinct purpose and **fresh context window**:
+
+| Role | Session | Context | Responsibility |
+|---|---|---|---|
+| **main** | Your conversation | Persistent | Goal → stop. Plugin handles the rest. |
+| **ralph** | Per-attempt strategist | Fresh | Review failure, update PLAN.md / RLM_INSTRUCTIONS.md, call `ralph_spawn_worker()`. |
+| **worker** | Per-attempt coder | Fresh | `ralph_load_context()` → code → `ralph_verify()` → stop. |
 
 Each RLM worker session:
 - Receives a **fresh context window** — no accumulated noise from prior attempts
@@ -32,10 +50,12 @@ Each RLM worker session:
 - Does **one pass**: load → code → verify → stop
 - Never re-prompts itself — Ralph controls iteration
 
-Ralph's session:
+Each Ralph strategist session:
+- Receives a **fresh context window** per attempt
+- Reviews what failed and why (via `AGENT_CONTEXT_FOR_NEXT_RALPH.md`)
+- Optionally updates `PLAN.md` or `RLM_INSTRUCTIONS.md` to guide the next worker
+- Calls `ralph_spawn_worker()` to hand off coding, then stops
 - Never writes code itself
-- Manages the protocol files between attempts (rollover, context shim)
-- Spawns the next worker after each failed attempt
 
 ### The RLM worker discipline
 
@@ -274,6 +294,10 @@ Manually trigger a rollover: copies `CURRENT_STATE.md` to `PREVIOUS_STATE.md`, r
 
 Run the configured verify command. Returns `{ verdict: "pass"|"fail"|"unknown", output, error }`.
 
+#### `ralph_spawn_worker()`
+
+**Ralph strategist sessions only.** Spawn a fresh RLM worker session for this attempt. Call this after reviewing protocol files and optionally updating `PLAN.md` / `RLM_INSTRUCTIONS.md`. Then stop — the plugin handles verification and spawns the next Ralph session if needed.
+
 ### Sub-agents
 
 #### `subagent_spawn(name, goal, context?)`
@@ -327,6 +351,8 @@ RALPH_BOOTSTRAP_RLM_INSTRUCTIONS="@/home/user/prompts/rlm-instructions.md"
 | `RALPH_CONTEXT_GATE_ERROR` | — | Error message thrown when the agent tries a destructive tool before loading context. |
 | `RALPH_WORKER_SYSTEM_PROMPT` | — | System prompt injected into every RLM worker session. Describes the one-pass contract. |
 | `RALPH_WORKER_PROMPT` | `{{attempt}}` | Initial prompt sent to each spawned RLM worker session. |
+| `RALPH_SESSION_SYSTEM_PROMPT` | — | System prompt injected into Ralph strategist sessions. |
+| `RALPH_SESSION_PROMPT` | `{{attempt}}` | Initial prompt sent to each spawned Ralph strategist session. |
 
 ### Example: custom continue prompt from a file
 
@@ -390,11 +416,11 @@ Edit `RLM_INSTRUCTIONS.md` to add project-specific playbooks, register MCP tools
 
 | Hook | What it does |
 |---|---|
-| `event: session.idle` | Routes to `handleWorkerIdle` (spawned workers) or `handleRalphIdle` (supervisor) based on session ID. |
-| `event: session.created` | Pre-allocates session state for known worker sessions. |
-| `experimental.chat.system.transform` | Injects the RLM worker system prompt into worker sessions; the Ralph supervisor prompt into all other sessions. |
+| `event: session.idle` | Routes idle events: **worker** → `handleWorkerIdle` (verify + continue loop); **ralph** → `handleRalphSessionIdle` (warn if no worker spawned); **main/other** → `handleMainIdle` (kick off attempt 1). |
+| `event: session.created` | Pre-allocates session state for known worker/ralph sessions. |
+| `experimental.chat.system.transform` | Three-way routing: **worker** → RLM file-first prompt; **ralph** → Ralph strategist prompt; **main/other** → supervisor prompt. |
 | `experimental.session.compacting` | Injects protocol file pointers into compaction context so state survives context compression. |
-| `tool.execute.before` | Blocks destructive tools (`write`, `edit`, `bash`, `delete`, `move`, `rename`) in **worker sessions** until `ralph_load_context()` has been called. Ralph's session is not gated. |
+| `tool.execute.before` | Blocks destructive tools (`write`, `edit`, `bash`, `delete`, `move`, `rename`) in **worker sessions** until `ralph_load_context()` has been called. Ralph strategist sessions are not gated. |
 
 
 ## Background
