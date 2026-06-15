@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": ".opencode/plugins-legacy",
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false
+  },
+  "include": [".opencode/plugins-legacy/**/*.ts"],
+  "exclude": ["node_modules", "dist", "packages"]
+}

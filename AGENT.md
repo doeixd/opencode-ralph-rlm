@@ -1,29 +1,36 @@
 # Project Agent Rules
 
 ## Scope
-- This repository contains the `ralph-rlm` OpenCode plugin implementation at `.opencode/plugins/ralph-rlm.ts`.
-- Keep changes focused on plugin behavior, protocol docs, and packaging artifacts.
+- v0.2 monorepo: `packages/engine`, `packages/provider`, `packages/worker-plugin`
+- Worker plugin entry: `.opencode/plugins/ralph-worker.ts`
+- Legacy v0.1 plugin (deprecated): `.opencode/plugins-legacy/ralph-rlm.ts`
 
 ## Source of truth
-- Runtime/plugin logic: `.opencode/plugins/ralph-rlm.ts`
-- User-facing docs: `README.md`
-- Publish metadata/scripts: `package.json`
-- Loop config example for this repo: `.opencode/ralph.json`
+- Loop + swarm logic: `packages/engine/src/`
+- Provider + supervisor tools: `packages/provider/server/`
+- Worker plugin: `packages/worker-plugin/src/`
+- User-facing docs: `README.md`, `GETTINGSTARTEDGUIDE.md`, `MIGRATION.md`
+- Architecture / milestones: `REVISION_PLAN.md`
+- Publish metadata/scripts: `package.json` (root + `packages/*`)
+- Loop config example: `.opencode/ralph.json`
 
 ## Build and verify
-- Install dependencies with `bun install`.
+- Install dependencies with `bun install` (Bun workspaces: `packages/*`).
 - Typecheck with `bun run typecheck`.
-- Build distributable with `bun run build`.
-- Preferred verification for this repo: `bun run verify`.
+- Build all packages with `bun run build` (`engine` + `provider` + `worker-plugin` + legacy plugin bundle).
+- Start supervisor provider: `bun run ralph-serve` (Nitro on `:8787`).
+- Preferred verification for this repo: `bun run bin/verify.ts` (or `bun run verify` where supported).
 
 ## Coding guidelines
-- Use strict TypeScript patterns already present in the file (narrow types, explicit unions, safe defaults).
-- Keep plugin behavior deterministic and file-first; avoid hidden state outside protocol files.
-- Preserve backward compatibility for config keys and tool names unless a breaking change is explicitly requested.
-- Prefer small, targeted edits over broad refactors in the plugin file.
+- Use strict TypeScript patterns (narrow types, explicit unions, safe defaults).
+- Keep loop/swarm behavior deterministic and file-first; avoid hidden state outside protocol files.
+- Preserve backward compatibility for `.opencode/ralph.json` config keys unless a breaking change is explicitly requested.
+- Prefer small, targeted edits over broad refactors.
+- Supervisor tools mutate state via engine/registry — not raw SDK calls in the Nitro process for swarm scripts except via subprocess runner.
 
 ## Docs guidelines
-- If behavior changes, update `README.md` in the same change.
+- If behavior changes, update `README.md` and `GETTINGSTARTEDGUIDE.md` in the same change.
+- Breaking UX changes require `MIGRATION.md` and `CHANGELOG.md` entries.
 - Keep examples copy-pasteable and aligned with actual scripts/config.
 
 ## Ralph / RLM workflow note

@@ -1,5 +1,9 @@
 node_modules/
 dist/
+.output/
+.nitro/
+packages/*/.output/
+packages/*/.nitro/
 .opencode/tmp/
 *.diff
 .claude/
@@ -17,3 +21,6 @@ RLM_INSTRUCTIONS.md
 SUPERVISOR_LOG.md
 TODOS.md
 .opencode/reviewer_state.json
+
+# Local agent/IDE terminal captures (not part of the repo)
+terminals/

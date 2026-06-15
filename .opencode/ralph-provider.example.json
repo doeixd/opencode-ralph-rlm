@@ -1,0 +1,12 @@
+{
+  "supervisor": {
+    "baseUrl": "https://api.openai.com/v1",
+    "modelID": "gpt-4o-mini",
+    "maxToolRounds": 8
+  },
+  "worker": {
+    "agent": "build",
+    "providerID": "anthropic",
+    "modelID": "claude-sonnet-4-5-20250929"
+  }
+}

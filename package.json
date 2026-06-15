@@ -1,8 +1,11 @@
 {
   "name": "opencode-ralph-rlm",
-  "version": "0.1.14",
-  "description": "OpenCode plugin: Ralph outer loop + RLM inner loop. Iterative AI development with file-first discipline and sub-agent support.",
+  "version": "0.2.0",
+  "description": "Ralph RLM v0.2: OpenCode supervisor provider + loop engine + worker plugin",
   "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
   "main": "./dist/ralph-rlm.js",
   "exports": {
     ".": "./dist/ralph-rlm.js"
@@ -12,10 +15,21 @@
     "README.md"
   ],
   "scripts": {
-    "build": "bun build .opencode/plugins/ralph-rlm.ts --outfile dist/ralph-rlm.js --target bun --format esm --external @opencode-ai/plugin",
-    "typecheck": "tsc --noEmit",
-    "verify": "bun run typecheck && bun run build",
-    "prepublishOnly": "bun run build",
+    "ralph-serve": "bun run bin/ralph-serve.ts",
+    "build": "bun run build:engine && bun run build:provider && bun run build:worker-plugin && bun run build:plugin",
+    "build:engine": "bun --cwd=packages/engine run build",
+    "build:provider": "bun --cwd=packages/provider run build",
+    "build:worker-plugin": "bun --cwd=packages/worker-plugin run build",
+    "build:plugin": "bun build .opencode/plugins-legacy/ralph-rlm.ts --outfile dist/ralph-rlm.js --target bun --format esm --external @opencode-ai/plugin",
+    "typecheck": "tsc -p tsconfig.plugin.json --noEmit && tsc -p tsconfig.legacy-plugin.json --noEmit && bun --cwd=packages/engine run typecheck && bun --cwd=packages/provider run typecheck && bun --cwd=packages/worker-plugin run typecheck",
+    "typecheck:plugin": "tsc -p tsconfig.plugin.json --noEmit",
+    "typecheck:legacy-plugin": "tsc -p tsconfig.legacy-plugin.json --noEmit",
+    "typecheck:engine": "bun --cwd=packages/engine run typecheck",
+    "typecheck:provider": "bun --cwd=packages/provider run typecheck",
+    "verify": "bun run bin/verify.ts",
+    "e2e-smoke": "bun run bin/e2e-smoke.ts",
+    "spawn-proof": "bun run --cwd packages/engine spawn-proof",
+    "prepublishOnly": "bun run build:plugin",
     "release": "npm run release:patch",
     "release:patch": "npm version patch && git push --follow-tags",
     "release:minor": "npm version minor && git push --follow-tags",
@@ -36,11 +50,15 @@
     "url": "https://github.com/doeixd/opencode-ralph-rlm"
   },
   "license": "MIT",
+  "dependencies": {
+    "@ralph-rlm/engine": "workspace:*"
+  },
   "peerDependencies": {
     "@opencode-ai/plugin": "*"
   },
   "devDependencies": {
     "@opencode-ai/plugin": "*",
+    "@opencode-ai/sdk": "*",
     "@types/node": "^22.0.0",
     "effect": "^3.13.0",
     "typescript": "^5.7.0"

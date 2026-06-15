@@ -1,0 +1,35 @@
+{
+  "name": "@ralph-rlm/engine",
+  "version": "0.2.0",
+  "description": "Ralph RLM loop engine — verify, rollover, OpenCode SDK worker lifecycle",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/doeixd/opencode-ralph-rlm",
+    "directory": "packages/engine"
+  },
+  "files": ["dist"],
+  "publishConfig": { "access": "public" },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "spawn-proof": "bun run src/spawn-worker-proof.ts",
+    "test": "bun test src/test"
+  },
+  "dependencies": {
+    "@opencode-ai/sdk": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}

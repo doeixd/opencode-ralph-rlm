@@ -1,0 +1,8 @@
+{
+  "enabled": true,
+  "maxAttempts": 5,
+  "verify": {
+    "command": ["node", "scripts/verify.mjs"],
+    "cwd": "."
+  }
+}

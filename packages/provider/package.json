@@ -1,0 +1,31 @@
+{
+  "name": "@ralph-rlm/provider",
+  "version": "0.2.0",
+  "description": "Ralph RLM OpenAI-compatible supervisor provider (Nitro)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/doeixd/opencode-ralph-rlm",
+    "directory": "packages/provider"
+  },
+  "files": [".output"],
+  "publishConfig": { "access": "public" },
+  "type": "module",
+  "scripts": {
+    "dev": "nitro dev --port 8787 --host 127.0.0.1",
+    "build": "nitro build",
+    "preview": "node .output/server/index.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "bun test server/test"
+  },
+  "dependencies": {
+    "@ralph-rlm/engine": "workspace:*",
+    "nitro": "^3.0.0",
+    "vite": "^6.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "h3": "2.0.1-rc.2",
+    "typescript": "^5.7.0"
+  }
+}

@@ -14,11 +14,8 @@
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
     "esModuleInterop": true,
-    "outDir": "dist",
-    "rootDir": ".opencode/plugins",
-    "declaration": false,
-    "sourceMap": false
-  },
-  "include": [".opencode/plugins/**/*.ts"],
-  "exclude": ["node_modules", "dist"]
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true
+  }
 }

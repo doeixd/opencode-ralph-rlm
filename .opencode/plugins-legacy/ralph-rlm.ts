@@ -1,5 +1,8 @@
 /**
- * ralph-rlm.ts
+ * ralph-rlm.ts — LEGACY (v0.1 plugin-as-orchestrator)
+ *
+ * DEPRECATED: Use ralph-rlm/supervisor provider model + `.opencode/plugins/ralph-worker.ts`.
+ * This file is kept for backward compatibility and npm publish only — not auto-loaded.
  *
  * OpenCode plugin: Ralph (outer supervisor loop) + RLM (inner file-first agent loop).
  * Built with Effect-TS for composable, typed async + error handling.

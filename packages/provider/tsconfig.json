@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "types": ["node", "nitro/types"]
+  },
+  "include": ["server/**/*.ts", "nitro.config.ts", "vite.config.ts"],
+  "exclude": ["node_modules", ".output", ".nitro", "server/test"]
+}

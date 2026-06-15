@@ -25,5 +25,13 @@
   "reviewerMaxRunsPerAttempt": 1,
   "reviewerOutputDir": ".opencode/reviews",
   "reviewerPostToConversation": true,
-  "agentMdPath": "AGENT.md"
+  "agentMdPath": "AGENT.md",
+  "swarm": {
+    "enabled": true,
+    "maxConcurrent": 5,
+    "maxTasksPerRun": 12,
+    "defaultTimeoutMinutes": 30,
+    "scriptRunner": "auto",
+    "unsafeEvalEnabled": false
+  }
 }

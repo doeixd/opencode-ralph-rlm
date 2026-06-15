@@ -1,0 +1,38 @@
+{
+  "name": "@ralph-rlm/worker-plugin",
+  "version": "0.2.0",
+  "description": "Thin Ralph RLM worker plugin — file-first tools and context gating",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/doeixd/opencode-ralph-rlm",
+    "directory": "packages/worker-plugin"
+  },
+  "files": ["dist"],
+  "publishConfig": { "access": "public" },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "bun test src/test"
+  },
+  "dependencies": {
+    "@ralph-rlm/engine": "workspace:*"
+  },
+  "peerDependencies": {
+    "@opencode-ai/plugin": "*"
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "*",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}
