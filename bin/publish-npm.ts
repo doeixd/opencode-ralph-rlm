@@ -30,9 +30,15 @@ writeFileSync(
   "utf8"
 );
 
-function run(label: string, cmd: string, args: string[], cwd = root): void {
+function run(
+  label: string,
+  cmd: string,
+  args: string[],
+  cwd = root,
+  opts?: { dryRun?: boolean }
+): void {
   console.log(`[publish] ${label}: ${cmd} ${args.join(" ")}`);
-  const extra = dryRun ? ["--dry-run"] : [];
+  const extra = opts?.dryRun && dryRun ? ["--dry-run"] : [];
   const result = spawnSync(cmd, [...args, ...extra], {
     cwd,
     stdio: "inherit",
@@ -79,7 +85,7 @@ try {
     if (pkg.workspace) {
       args.push("-w", pkg.name);
     }
-    run(`publish ${pkg.name}`, "npm", args, root);
+    run(`publish ${pkg.name}`, "npm", args, root, { dryRun: true });
   }
 
   console.log(dryRun ? "[publish] Dry run complete." : "[publish] All packages published.");
