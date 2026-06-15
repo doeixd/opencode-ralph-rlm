@@ -1,143 +1,54 @@
-name: Publish to npm
+name: Publish npm
 
-# ── Triggers ──────────────────────────────────────────────────────────────────
-#
-# Automatic: push a tag of the form  v1.2.3  or  v1.2.3-beta.1
-#   git tag v0.1.0 && git push origin v0.1.0
-#
-# Manual: GitHub UI → Actions → "Publish to npm" → Run workflow
-#   Optionally pass a dist-tag (e.g. "beta", "next"); defaults to "latest".
-#
 on:
-  push:
-    tags:
-      - "v[0-9]+.[0-9]+.[0-9]+"
-      - "v[0-9]+.[0-9]+.[0-9]+-*"
-
   workflow_dispatch:
     inputs:
-      dist_tag:
-        description: "npm dist-tag (e.g. latest, beta, next)"
+      dry_run:
+        description: "Dry run only (no upload)"
         required: false
-        default: "latest"
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
 
-# ── Permissions ───────────────────────────────────────────────────────────────
 permissions:
   contents: read
-  id-token: write   # required for npm provenance attestation
 
-# ── Jobs ──────────────────────────────────────────────────────────────────────
 jobs:
   publish:
-    name: Build & publish
+    name: Publish @ralph-rlm packages
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout ─────────────────────────────────────────────────────────────
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 2. Install Bun ──────────────────────────────────────────────────────────
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
 
-      # 3. Install dependencies ─────────────────────────────────────────────────
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      # 4. Type-check ───────────────────────────────────────────────────────────
-      - name: Type-check
-        run: bun run typecheck
-
-      # 5. Build ────────────────────────────────────────────────────────────────
-      - name: Build
-        run: bun run build
-
-      # 6. Verify dist output ───────────────────────────────────────────────────
-      - name: Verify dist
+      - name: Build packages
         run: |
-          if [ ! -f dist/ralph-rlm.js ]; then
-            echo "::error::dist/ralph-rlm.js not found after build"
-            exit 1
-          fi
-          echo "dist/ralph-rlm.js — $(wc -l < dist/ralph-rlm.js) lines, $(du -sh dist/ralph-rlm.js | cut -f1)"
+          bun --cwd=packages/engine run build
+          bun --cwd=packages/worker-plugin run build
+          bun --cwd=packages/provider run build
+          bun build .opencode/plugins-legacy/ralph-rlm.ts \
+            --outfile dist/ralph-rlm.js \
+            --target bun \
+            --format esm \
+            --external @opencode-ai/plugin
 
-      # 7. Resolve version and dist-tag ─────────────────────────────────────────
-      #
-      # For tag pushes:
-      #   v1.2.3          → version=1.2.3,       dist-tag=latest
-      #   v1.2.3-beta.1   → version=1.2.3-beta.1, dist-tag=beta
-      #   v1.2.3-next.0   → version=1.2.3-next.0, dist-tag=next
-      #   v1.2.3-rc.1     → version=1.2.3-rc.1,   dist-tag=rc
-      #
-      # For manual dispatch the package.json version is used as-is and the
-      # dist-tag comes from the workflow_dispatch input.
-      #
-      - name: Resolve version and dist-tag
-        id: meta
-        run: |
-          if [[ "${{ github.event_name }}" == "push" ]]; then
-            # Strip leading "v" from the tag name
-            RAW_VERSION="${GITHUB_REF_NAME#v}"
-            echo "version=$RAW_VERSION" >> "$GITHUB_OUTPUT"
-
-            # Derive dist-tag from the pre-release label, if any
-            # e.g. "1.2.3-beta.1" → "beta"
-            PRERELEASE=$(echo "$RAW_VERSION" | grep -oP '(?<=-)[a-zA-Z]+' || true)
-            DIST_TAG="${PRERELEASE:-latest}"
-            echo "dist_tag=$DIST_TAG" >> "$GITHUB_OUTPUT"
-          else
-            # Manual dispatch — use version already in package.json
-            PKG_VERSION=$(node -p "require('./package.json').version")
-            echo "version=$PKG_VERSION" >> "$GITHUB_OUTPUT"
-            echo "dist_tag=${{ inputs.dist_tag }}" >> "$GITHUB_OUTPUT"
-          fi
-
-      # 8. Stamp version into package.json (tag-push only) ──────────────────────
-      - name: Stamp version
-        if: github.event_name == 'push'
-        run: |
-          VERSION="${{ steps.meta.outputs.version }}"
-          # Use Node's json in-place editing to avoid any formatting drift
-          node -e "
-            const fs = require('fs');
-            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-            pkg.version = '$VERSION';
-            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
-          "
-          echo "Stamped version $VERSION into package.json"
-
-      # 9. Configure npm auth ───────────────────────────────────────────────────
-      - name: Configure npm auth
-        run: |
-          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      # 10. Publish ─────────────────────────────────────────────────────────────
       - name: Publish to npm
-        run: |
-          DIST_TAG="${{ steps.meta.outputs.dist_tag }}"
-          VERSION="${{ steps.meta.outputs.version }}"
-          echo "Publishing version $VERSION with tag '$DIST_TAG'"
-          npm publish --access public --tag "$DIST_TAG" --provenance
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      # 11. Summary ─────────────────────────────────────────────────────────────
-      - name: Write job summary
         run: |
-          VERSION="${{ steps.meta.outputs.version }}"
-          DIST_TAG="${{ steps.meta.outputs.dist_tag }}"
-          PKG_NAME=$(node -p "require('./package.json').name")
-          echo "## Published \`${PKG_NAME}@${VERSION}\` :rocket:" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Package | \`${PKG_NAME}\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Version | \`${VERSION}\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| dist-tag | \`${DIST_TAG}\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Registry | https://www.npmjs.com/package/${PKG_NAME} |" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            bun run bin/publish-npm.ts --dry-run
+          else
+            bun run bin/publish-npm.ts
+          fi

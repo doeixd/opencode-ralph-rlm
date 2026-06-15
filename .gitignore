@@ -24,3 +24,6 @@ TODOS.md
 
 # Local agent/IDE terminal captures (not part of the repo)
 terminals/
+
+# Ephemeral npm auth (bin/publish-npm.ts)
+.npmrc

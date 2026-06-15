@@ -28,6 +28,7 @@
     "typecheck:provider": "bun --cwd=packages/provider run typecheck",
     "verify": "bun run bin/verify.ts",
     "e2e-smoke": "bun run bin/e2e-smoke.ts",
+    "publish:npm": "bun run bin/publish-npm.ts",
     "spawn-proof": "bun run --cwd packages/engine spawn-proof",
     "prepublishOnly": "bun run build:plugin",
     "release": "npm run release:patch",
