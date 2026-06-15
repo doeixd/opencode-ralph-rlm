@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Publish @ralph-rlm/* and opencode-ralph-rlm to npm (v0.2.0+).
+ * Publish @doeixd/opencode-ralph-rlm to npm (single package with subpath exports).
  *
  * Requires NPM_TOKEN in the environment (npm automation token).
  *
@@ -26,7 +26,7 @@ if (!token) {
 const npmrcPath = join(root, ".npmrc");
 writeFileSync(
   npmrcPath,
-  `//registry.npmjs.org/:_authToken=${token}\n@ralph-rlm:registry=https://registry.npmjs.org/\n`,
+  `//registry.npmjs.org/:_authToken=${token}\n`,
   "utf8"
 );
 
@@ -73,22 +73,15 @@ try {
     "@opencode-ai/plugin",
   ]);
 
-  const packages = [
-    { name: "@ralph-rlm/engine", workspace: true },
-    { name: "@ralph-rlm/worker-plugin", workspace: true },
-    { name: "@ralph-rlm/provider", workspace: true },
-    { name: "opencode-ralph-rlm", workspace: false },
-  ];
+  run(
+    "publish @doeixd/opencode-ralph-rlm",
+    "npm",
+    ["publish", "--access", "public"],
+    root,
+    { dryRun: true }
+  );
 
-  for (const pkg of packages) {
-    const args = ["publish", "--access", "public"];
-    if (pkg.workspace) {
-      args.push("-w", pkg.name);
-    }
-    run(`publish ${pkg.name}`, "npm", args, root, { dryRun: true });
-  }
-
-  console.log(dryRun ? "[publish] Dry run complete." : "[publish] All packages published.");
+  console.log(dryRun ? "[publish] Dry run complete." : "[publish] Package published.");
 } finally {
   try {
     unlinkSync(npmrcPath);

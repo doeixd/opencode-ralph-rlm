@@ -1,4 +1,4 @@
-import { createOpencodeRuntime, type OpencodeRuntime } from "@ralph-rlm/engine";
+import { createOpencodeRuntime, type OpencodeRuntime } from "@doeixd/opencode-ralph-rlm-engine";
 
 let cached: OpencodeRuntime | undefined;
 

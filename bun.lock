@@ -4,10 +4,8 @@
   "workspaces": {
     "": {
       "name": "opencode-ralph-rlm",
-      "dependencies": {
-        "@ralph-rlm/engine": "workspace:*",
-      },
       "devDependencies": {
+        "@doeixd/opencode-ralph-rlm-engine": "workspace:*",
         "@opencode-ai/plugin": "*",
         "@opencode-ai/sdk": "*",
         "@types/node": "^22.0.0",
@@ -19,7 +17,7 @@
       },
     },
     "packages/engine": {
-      "name": "@ralph-rlm/engine",
+      "name": "@doeixd/opencode-ralph-rlm-engine",
       "version": "0.2.0",
       "dependencies": {
         "@opencode-ai/sdk": "*",
@@ -30,10 +28,10 @@
       },
     },
     "packages/provider": {
-      "name": "@ralph-rlm/provider",
+      "name": "@doeixd/opencode-ralph-rlm-provider",
       "version": "0.2.0",
       "dependencies": {
-        "@ralph-rlm/engine": "workspace:*",
+        "@doeixd/opencode-ralph-rlm-engine": "workspace:*",
         "nitro": "^3.0.0",
         "vite": "^6.0.0",
       },
@@ -44,10 +42,10 @@
       },
     },
     "packages/worker-plugin": {
-      "name": "@ralph-rlm/worker-plugin",
+      "name": "@doeixd/opencode-ralph-rlm-worker-plugin",
       "version": "0.2.0",
       "dependencies": {
-        "@ralph-rlm/engine": "workspace:*",
+        "@doeixd/opencode-ralph-rlm-engine": "workspace:*",
       },
       "devDependencies": {
         "@opencode-ai/plugin": "*",
@@ -60,6 +58,12 @@
     },
   },
   "packages": {
+    "@doeixd/opencode-ralph-rlm-engine": ["@doeixd/opencode-ralph-rlm-engine@workspace:packages/engine"],
+
+    "@doeixd/opencode-ralph-rlm-provider": ["@doeixd/opencode-ralph-rlm-provider@workspace:packages/provider"],
+
+    "@doeixd/opencode-ralph-rlm-worker-plugin": ["@doeixd/opencode-ralph-rlm-worker-plugin@workspace:packages/worker-plugin"],
+
     "@esbuild/aix-ppc64": ["@esbuild/aix-ppc64@0.25.12", "", { "os": "aix", "cpu": "ppc64" }, "sha512-Hhmwd6CInZ3dwpuGTF8fJG6yoWmsToE+vYgD4nytZVxcu1ulHpUQRAB1UJ8+N1Am3Mz4+xOByoQoSZf4D+CpkA=="],
 
     "@esbuild/android-arm": ["@esbuild/android-arm@0.25.12", "", { "os": "android", "cpu": "arm" }, "sha512-VJ+sKvNA/GE7Ccacc9Cha7bpS8nyzVv0jdVgwNDaR4gDMC/2TTRc33Ip8qrNYUcpkOHUT5OZ0bUcNNVZQ9RLlg=="],
@@ -115,12 +119,6 @@
     "@opencode-ai/plugin": ["@opencode-ai/plugin@1.1.54", "", { "dependencies": { "@opencode-ai/sdk": "1.1.54", "zod": "4.1.8" } }, "sha512-qT8mdybi26HKI8ErfFmiVb8oefv7xwskiJ2EtVcCKlx9LUfzJPB7wg5KfJz98Wc7B1k9wC2eKgIbYZc0PAvsZw=="],
 
     "@opencode-ai/sdk": ["@opencode-ai/sdk@1.1.54", "", {}, "sha512-qjyD9NbJDRYK7hUmlpYymOh/TMF/Lgnew6tqLfm6TJFUnEO/V1BszQwDD1NOzbgflVeE2OBFpavyjxsreCalIQ=="],
-
-    "@ralph-rlm/engine": ["@ralph-rlm/engine@workspace:packages/engine"],
-
-    "@ralph-rlm/provider": ["@ralph-rlm/provider@workspace:packages/provider"],
-
-    "@ralph-rlm/worker-plugin": ["@ralph-rlm/worker-plugin@workspace:packages/worker-plugin"],
 
     "@rollup/rollup-android-arm-eabi": ["@rollup/rollup-android-arm-eabi@4.62.0", "", { "os": "android", "cpu": "arm" }, "sha512-IPIQ55ythEHkfEd9jMEi32OQ7SxURsGA43JI22lj01OLZNt2NUbJX8YUHxkVWyQ6daHPNn0truF5nSj3DQp6YQ=="],
 

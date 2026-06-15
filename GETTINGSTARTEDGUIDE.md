@@ -40,7 +40,7 @@ In **your target project**, copy both plugins:
 
 ```text
 .opencode/plugins/
-├── ralph-worker.ts           # re-exports @ralph-rlm/worker-plugin
+├── ralph-worker.ts           # re-exports @doeixd/opencode-ralph-rlm/worker-plugin
 └── ralph-session-bridge.ts   # injects session ID on provider HTTP requests
 ```
 

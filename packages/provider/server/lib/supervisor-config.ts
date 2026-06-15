@@ -1,5 +1,5 @@
 import path from "node:path";
-import { readTextFile, fileExists } from "@ralph-rlm/engine";
+import { readTextFile, fileExists } from "@doeixd/opencode-ralph-rlm-engine";
 
 export type SupervisorLlmConfig = {
   baseUrl: string;

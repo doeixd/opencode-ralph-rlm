@@ -12,7 +12,7 @@ import {
   type LoopEngine,
   type OpencodeEventSubscription,
   type OpencodeRuntime,
-} from "@ralph-rlm/engine";
+} from "@doeixd/opencode-ralph-rlm-engine";
 import { getEngineForSession } from "./loop-service.js";
 import {
   getSwarmRegistry,

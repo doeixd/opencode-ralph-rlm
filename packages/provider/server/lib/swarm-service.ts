@@ -10,7 +10,7 @@ import {
   type SpawnSwarmInput,
   type SwarmRunnerOptions,
   type SwarmTaskInput,
-} from "@ralph-rlm/engine";
+} from "@doeixd/opencode-ralph-rlm-engine";
 import { getOpencodeRuntime } from "./runtime.js";
 import { swarmRegistry } from "./swarm-registry.js";
 

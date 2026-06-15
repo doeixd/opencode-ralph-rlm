@@ -1,4 +1,4 @@
-import { DEFAULT_TEMPLATES, readTextFile } from "@ralph-rlm/engine";
+import { DEFAULT_TEMPLATES, readTextFile } from "@doeixd/opencode-ralph-rlm-engine";
 import path from "node:path";
 
 export type WorkerPluginTemplates = {

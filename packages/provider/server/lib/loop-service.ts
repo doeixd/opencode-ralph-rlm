@@ -2,7 +2,7 @@ import {
   subscribeWorktreeEvents,
   type LoopEngine,
   type LoopEngineOptions,
-} from "@ralph-rlm/engine";
+} from "@doeixd/opencode-ralph-rlm-engine";
 import { loopRegistry } from "./loop-registry.js";
 import { getOpencodeRuntime } from "./runtime.js";
 

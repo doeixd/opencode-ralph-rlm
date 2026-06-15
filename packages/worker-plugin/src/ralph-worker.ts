@@ -17,7 +17,7 @@ import {
   runVerify,
   writePendingInput,
   type ResolvedConfig,
-} from "@ralph-rlm/engine";
+} from "@doeixd/opencode-ralph-rlm-engine";
 import { shouldGateDestructiveTool } from "./gate.js";
 import { freshWorkerSession, type WorkerSessionState } from "./session-state.js";
 import { loadWorkerPluginTemplates } from "./templates.js";

@@ -1,4 +1,4 @@
-import type { OpencodeEventSubscription, OpencodeRuntime } from "@ralph-rlm/engine";
+import type { OpencodeEventSubscription, OpencodeRuntime } from "@doeixd/opencode-ralph-rlm-engine";
 
 export type ProviderMockRuntime = OpencodeRuntime & {
   emitIdle: (sessionId: string) => Promise<void>;

@@ -1,5 +1,5 @@
 {
-  "name": "opencode-ralph-rlm",
+  "name": "@doeixd/opencode-ralph-rlm",
   "version": "0.2.0",
   "description": "Ralph RLM v0.2: OpenCode supervisor provider + loop engine + worker plugin",
   "type": "module",
@@ -8,12 +8,29 @@
   ],
   "main": "./dist/ralph-rlm.js",
   "exports": {
-    ".": "./dist/ralph-rlm.js"
+    ".": "./dist/ralph-rlm.js",
+    "./engine": {
+      "types": "./packages/engine/dist/index.d.ts",
+      "import": "./packages/engine/dist/index.js"
+    },
+    "./worker-plugin": {
+      "types": "./packages/worker-plugin/dist/index.d.ts",
+      "import": "./packages/worker-plugin/dist/index.js"
+    },
+    "./provider": "./packages/provider/.output/server/index.mjs"
   },
   "files": [
     "dist",
+    "packages/engine/dist",
+    "packages/worker-plugin/dist",
+    "packages/provider/.output",
+    ".opencode/plugins",
+    "bin/ralph-serve.ts",
     "README.md"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "ralph-serve": "bun run bin/ralph-serve.ts",
     "build": "bun run build:engine && bun run build:provider && bun run build:worker-plugin && bun run build:plugin",
@@ -30,7 +47,7 @@
     "e2e-smoke": "bun run bin/e2e-smoke.ts",
     "publish:npm": "bun run bin/publish-npm.ts",
     "spawn-proof": "bun run --cwd packages/engine spawn-proof",
-    "prepublishOnly": "bun run build:plugin",
+    "prepublishOnly": "bun run build",
     "release": "npm run release:patch",
     "release:patch": "npm version patch && git push --follow-tags",
     "release:minor": "npm version minor && git push --follow-tags",
@@ -51,13 +68,11 @@
     "url": "https://github.com/doeixd/opencode-ralph-rlm"
   },
   "license": "MIT",
-  "dependencies": {
-    "@ralph-rlm/engine": "workspace:*"
-  },
   "peerDependencies": {
     "@opencode-ai/plugin": "*"
   },
   "devDependencies": {
+    "@doeixd/opencode-ralph-rlm-engine": "workspace:*",
     "@opencode-ai/plugin": "*",
     "@opencode-ai/sdk": "*",
     "@types/node": "^22.0.0",

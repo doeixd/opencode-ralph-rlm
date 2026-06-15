@@ -2,7 +2,7 @@
 
 An [OpenCode](https://opencode.ai) integration that runs a **persistent, self-correcting Ralph + RLM loop**. Describe a goal in the TUI, walk away, and come back to protocol files and verify output — not a polluted chat history.
 
-**v0.2** is a **provider-as-supervisor** architecture: the revision plan (M0–M8) is implemented; see [`REVISION_PLAN.md`](REVISION_PLAN.md) for architecture detail and v0.3 roadmap.
+**v0.2** uses a **provider-as-supervisor** architecture: you talk to one OpenCode model; a local HTTP provider runs the loop, spawns workers, and verifies results in the background.
 
 | Doc | Audience |
 |-----|----------|
@@ -10,7 +10,6 @@ An [OpenCode](https://opencode.ai) integration that runs a **persistent, self-co
 | [`MIGRATION.md`](MIGRATION.md) | Upgrading from the v0.1 plugin |
 | [`CHANGELOG.md`](CHANGELOG.md) | Release notes |
 
----
 
 ## v0.2 architecture
 
@@ -29,16 +28,15 @@ packages/provider — Nitro :8787
 Protocol files (PLAN.md, RLM_INSTRUCTIONS.md, CURRENT_STATE.md, …)
 ```
 
-| Layer | Package | Role |
-|-------|---------|------|
-| Supervisor API | `@ralph-rlm/provider` | OpenAI-compatible `/v1/chat/completions`, management `/api/*` |
-| Loop engine | `@ralph-rlm/engine` | Verify, rollover, worker spawn, swarms — no LLM orchestration |
-| Worker tools | `@ralph-rlm/worker-plugin` | RLM tools, context gate, `ralph_ask` |
+| Layer | Module | Role |
+|-------|--------|------|
+| Supervisor API | `packages/provider` | OpenAI-compatible `/v1/chat/completions`, management `/api/*` |
+| Loop engine | `packages/engine` | Verify, rollover, worker spawn, swarms — no LLM orchestration |
+| Worker tools | `packages/worker-plugin` | RLM tools, context gate, `ralph_ask` |
 | Session bridge | `.opencode/plugins/ralph-session-bridge.ts` | Injects `x-opencode-session-id` on provider requests |
 
 The legacy monolithic plugin (`.opencode/plugins-legacy/ralph-rlm.ts`) remains for reference and is **not loaded by default**. Do not use `ralph_spawn_worker()` or `ralph_create_supervisor_session()` in v0.2.
 
----
 
 ## Quick start
 
@@ -145,7 +143,6 @@ bun run ralph-serve -- --doctor --worktree .
 bun run e2e-smoke -- --spawn
 ```
 
----
 
 ## How the loop behaves
 
@@ -167,7 +164,6 @@ Model: Attempt 2. Last verify failed. Worker idle. …
 - **Worker plugin:** gates `edit`/`bash` until `ralph_load_context()`; provides `rlm_grep` / `rlm_slice`.
 - **Permissions:** bash/edit prompts appear in the **worker session** TUI (answer there).
 
----
 
 ## Protocol files
 
@@ -175,7 +171,7 @@ Created on first `start_loop` (bootstrap) and updated across attempts:
 
 | File | Role |
 |------|------|
-| `PLAN.md` | Goal, definition of done, milestones |
+| `PLAN.md` | Goal and definition of done |
 | `RLM_INSTRUCTIONS.md` | Worker playbooks (debug, refactor, repo conventions) |
 | `CURRENT_STATE.md` | Scratch pad for the active attempt only |
 | `PREVIOUS_STATE.md` | Snapshot after failed verify |
@@ -187,7 +183,6 @@ Created on first `start_loop` (bootstrap) and updated across attempts:
 
 Supervisor updates strategy via `update_plan` / `update_rlm_instructions`. Workers may patch `PLAN.md` / `RLM_INSTRUCTIONS.md` with `ralph_update_plan` / `ralph_update_rlm_instructions` when playbooks need to change mid-attempt.
 
----
 
 ## Default agent instructions
 
@@ -211,7 +206,6 @@ v0.2 ships opinionated defaults so loops work without hand-authored prompts:
 
 Tune `RLM_INSTRUCTIONS.md` and `PLAN.md` in your repo after the first failures — that is the durable steering surface for workers.
 
----
 
 ## Supervisor tools (chat)
 
@@ -233,7 +227,6 @@ The provider supervisor LLM calls these internally — you steer in natural lang
 
 Test mode (no external LLM): `RALPH_TEST_MODE=1 bun run ralph-serve`
 
----
 
 ## Worker tools
 
@@ -249,7 +242,6 @@ Available in background worker sessions (ralph-worker plugin):
 | `ralph_update_plan` / `ralph_update_rlm_instructions` | Durable strategy patches |
 | `ralph_ask` | Blocking question to supervisor (use sparingly) |
 
----
 
 ## Swarm parallelism
 
@@ -271,7 +263,6 @@ The supervisor uses `spawn_swarm` with structured tasks. Caps: `swarm.maxConcurr
 
 or `RALPH_SWARM_UNSAFE_EVAL=1`. Scripts are audited under `.opencode/swarm/runs/<id>/`. Prefer declarative `spawn_swarm` for normal use.
 
----
 
 ## Session correlation
 
@@ -279,7 +270,6 @@ OpenCode does not forward session IDs to custom providers by default. Load **`ra
 
 Confirm after your first supervisor message: response header `x-ralph-session-source` should be `header:x-opencode-session-id`, not `anonymous`. See [GETTINGSTARTEDGUIDE.md § Session correlation](GETTINGSTARTEDGUIDE.md#session-correlation-required-for-multi-session).
 
----
 
 ## Management API
 
@@ -298,7 +288,6 @@ With `bun run ralph-serve` running:
 
 OpenAPI UI: `http://127.0.0.1:8787/_scalar`
 
----
 
 ## Configuration reference
 
@@ -338,7 +327,6 @@ Legacy keys (`autoStartOnMainIdle`, `strategistHandoffMinutes`, reviewer setting
 | `RALPH_COMPACTION_CONTEXT` | Override compaction context block |
 | `RALPH_CONTEXT_GATE_ERROR` | Override context-gate error message |
 
----
 
 ## Development and verification
 
@@ -349,30 +337,28 @@ bun run e2e-smoke -- --spawn   # HTTP smoke against ephemeral provider
 bun run ralph-serve
 ```
 
-Workspace packages:
+Monorepo modules: `packages/engine`, `packages/provider`, `packages/worker-plugin`.
 
-- `packages/engine` — `@ralph-rlm/engine`
-- `packages/provider` — `@ralph-rlm/provider`
-- `packages/worker-plugin` — `@ralph-rlm/worker-plugin`
+CI: [`.github/workflows/verify.yml`](.github/workflows/verify.yml)
 
-Contributor architecture: [`REVISION_PLAN.md`](REVISION_PLAN.md) · CI: [`.github/workflows/verify.yml`](.github/workflows/verify.yml)
 
----
+## npm package
 
-## npm packages
+Published as a **single package** with subpath exports:
 
-v0.2 is a **Bun workspace** with scoped packages:
+```bash
+npm install @doeixd/opencode-ralph-rlm
+```
 
-| Package | Contents |
-|---------|----------|
-| `@ralph-rlm/engine` | Loop + swarm engine |
-| `@ralph-rlm/provider` | Nitro supervisor server |
-| `@ralph-rlm/worker-plugin` | Thin OpenCode worker plugin |
-| `opencode-ralph-rlm` (root) | Meta package; legacy `dist/ralph-rlm.js` for v0.1 consumers |
+| Import | Contents |
+|--------|----------|
+| `@doeixd/opencode-ralph-rlm` | Legacy v0.1 bundle (`dist/ralph-rlm.js`) |
+| `@doeixd/opencode-ralph-rlm/engine` | Loop + swarm engine |
+| `@doeixd/opencode-ralph-rlm/worker-plugin` | Thin OpenCode worker plugin |
+| `@doeixd/opencode-ralph-rlm/provider` | Nitro supervisor server entry |
 
-**Recommended install today:** clone this repo and run `bun run ralph-serve`, or copy `.opencode/plugins/` + config into your project. Scoped npm publish is documented in the revision plan (M5.5 / M8.5).
+**Recommended for development:** clone this repo and run `bun run ralph-serve`, or copy `.opencode/plugins/` + config into your project.
 
----
 
 ## Philosophy
 
@@ -383,7 +369,6 @@ v0.2 is a **Bun workspace** with scoped packages:
 
 Based on [Recursive Language Models (arXiv:2512.24601)](https://arxiv.org/abs/2512.24601) and the Ralph overnight-loop pattern.
 
----
 
 ## License
 

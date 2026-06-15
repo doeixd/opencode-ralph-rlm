@@ -5,7 +5,8 @@
     "skipLibCheck": true,
     "baseUrl": ".",
     "paths": {
-      "@ralph-rlm/worker-plugin": ["packages/worker-plugin/dist/index.d.ts"]
+      "@doeixd/opencode-ralph-rlm/worker-plugin": ["packages/worker-plugin/dist/index.d.ts"],
+      "@doeixd/opencode-ralph-rlm/engine": ["packages/engine/dist/index.d.ts"]
     }
   },
   "include": [".opencode/plugins/ralph-worker.ts", ".opencode/plugins/ralph-session-bridge.ts"]

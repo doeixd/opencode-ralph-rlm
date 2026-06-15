@@ -2,7 +2,7 @@ import path from "node:path";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { describe, expect, test } from "bun:test";
-import { writeLoopAttemptMarker } from "@ralph-rlm/engine";
+import { writeLoopAttemptMarker } from "@doeixd/opencode-ralph-rlm-engine";
 import { parseAttemptFromTitle } from "../session-state.js";
 
 describe("worker attempt sync helpers", () => {
@@ -18,7 +18,7 @@ describe("worker attempt sync helpers", () => {
         attempt: 2,
         sessionId: "supervisor-1",
       });
-      const { readLoopAttemptMarker } = await import("@ralph-rlm/engine");
+      const { readLoopAttemptMarker } = await import("@doeixd/opencode-ralph-rlm-engine");
       expect(await readLoopAttemptMarker(root)).toBe(2);
     } finally {
       await rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });

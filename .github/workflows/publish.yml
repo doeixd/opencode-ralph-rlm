@@ -23,7 +23,7 @@ permissions:
 
 jobs:
   publish:
-    name: Publish @ralph-rlm packages
+    name: Publish @doeixd/opencode-ralph-rlm
     runs-on: ubuntu-latest
 
     steps:
