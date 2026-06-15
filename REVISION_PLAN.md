@@ -1,6 +1,6 @@
 # Ralph-RLM Revision Plan
 
-> **Status:** v0.2 complete — M0–M8 implemented; human-facing docs aligned; optional manual TUI validation + git tag/publish remain
+> **Status:** v0.2.0 shipped — M0–M8 implemented; tagged and pushed; optional manual TUI validation + npm publish remain
 > **Date:** 2026-06-15 (updated 2026-06-15)  
 > **Audience:** Contributors implementing the v0.2 architecture and planning v0.3
 
@@ -870,7 +870,7 @@ Query `?sessionId=` or header `x-ralph-session-key` consistent with loop routes.
 | M8.1 Live session-ID spike | — | [x] §7.1 spike notes + M0.4b bridge plugin; [ ] live TUI confirms `header:x-opencode-session-id` |
 | M8.2 E2E smoke checklist | — | [x] `bin/e2e-smoke.ts` HTTP checks; [ ] manual TUI steps (`ralph_ask`, swarm, fail→pass) |
 | M8.3 Changelog + commit | — | [x] `CHANGELOG.md`; [x] working tree committed |
-| M8.4 Tag `v0.2.0` | — | [x] local tag; [ ] `git push origin v0.2.0` (manual) |
+| M8.4 Tag `v0.2.0` | — | [x] `git tag v0.2.0` + pushed to `origin` |
 | M8.5 npm publish | — | Scoped packages or meta-package per M5.5 (workflow or manual) |
 | M8.6 Human-facing docs | — | [x] README + GETTINGSTARTED + MIGRATION aligned with v0.2; session correlation; default agent instructions |
 
