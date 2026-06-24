@@ -25,7 +25,7 @@ import {
   type PlanContext,
   type ResolvedConfig,
 } from "@doeixd/opencode-ralph-rlm/engine";
-import { shouldGateDestructiveTool } from "./gate.js";
+import { SAFE_TOOLS, shouldGateDestructiveTool } from "./gate.js";
 import { freshWorkerSession, type WorkerSessionState } from "./session-state.js";
 import { loadWorkerPluginTemplates } from "./templates.js";
 
@@ -46,6 +46,30 @@ export const RalphWorkerPlugin: Plugin = async ({ client, worktree }) => {
   async function getPlanCtx(root: string): Promise<PlanContext> {
     const cfg = await getConfig();
     return resolvePlanContext(root, cfg.plans);
+  }
+
+  // This plugin loads for EVERY session in the project. Ralph behavior (worker
+  // system prompt, the edit/bash context gate, compaction context, and the
+  // ralph_/rlm_ tools) must only apply to Ralph worker sessions — never to a
+  // user's normal OpenCode sessions. Worker sessions are titled
+  // `rlm-worker-attempt-N` by the engine; we scope by that title.
+  const workerSessionCache = new Map<string, boolean>();
+  async function isRalphWorkerSession(sessionID: string): Promise<boolean> {
+    const cached = workerSessionCache.get(sessionID);
+    if (cached !== undefined) return cached;
+    try {
+      const res = await client.session.get({
+        path: { id: sessionID },
+        query: { directory: worktree },
+      });
+      const title = ((res as { data?: { title?: string } })?.data?.title ?? "") as string;
+      const isWorker = title.startsWith("rlm-worker-attempt-");
+      workerSessionCache.set(sessionID, isWorker); // cache only confirmed results
+      return isWorker;
+    } catch {
+      // Transient failure — don't cache; retry on the next call.
+      return false;
+    }
   }
 
   /** Worktree-relative path to CONTEXT_FOR_RLM.md for the active plan. */
@@ -573,27 +597,43 @@ export const RalphWorkerPlugin: Plugin = async ({ client, worktree }) => {
     },
 
     "experimental.chat.system.transform": async (input: { sessionID?: string }, output: { system?: string[] }) => {
+      const sessionID = input.sessionID;
+      // Only inject the worker system prompt into Ralph worker sessions —
+      // never into the user's normal OpenCode sessions.
+      if (!sessionID || !(await isRalphWorkerSession(sessionID))) return;
       output.system = output.system ?? [];
       output.system.push(templates.workerSystemPrompt);
-      const sessionID = input.sessionID;
-      if (sessionID) {
-        await syncSessionAttempt(sessionID, worktree);
-      }
+      await syncSessionAttempt(sessionID, worktree);
     },
 
-    "experimental.session.compacting": async (_input: unknown, output: { context?: string[] }) => {
+    "experimental.session.compacting": async (
+      input: { sessionID?: string },
+      output: { context?: string[] }
+    ) => {
+      if (!input.sessionID || !(await isRalphWorkerSession(input.sessionID))) return;
       output.context = output.context ?? [];
       output.context.push(templates.compactionContext);
     },
 
     "tool.execute.before": async (input: { sessionID?: string; tool?: string; call?: { name?: string } }) => {
-      const cfg = await getConfig();
       const sessionID = input.sessionID;
       if (!sessionID) return;
+      const toolName = input.tool ?? input.call?.name ?? "";
 
+      // In a normal (non-worker) session, the plugin's tools are present but
+      // must stay inert, and we must NOT gate the user's edit/bash.
+      if (!(await isRalphWorkerSession(sessionID))) {
+        if (SAFE_TOOLS.has(toolName)) {
+          throw new Error(
+            "This Ralph RLM tool only runs inside a Ralph worker session (created by the loop), not a normal OpenCode session."
+          );
+        }
+        return;
+      }
+
+      const cfg = await getConfig();
       await syncSessionAttempt(sessionID, worktree);
       const st = getSession(sessionID);
-      const toolName = input.tool ?? input.call?.name ?? "";
       if (
         shouldGateDestructiveTool({
           gateEnabled: cfg.gateDestructiveToolsUntilContextLoaded,

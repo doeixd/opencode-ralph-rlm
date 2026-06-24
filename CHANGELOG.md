@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.3.6] - 2026-06-24
+
+### Fixed
+
+- **Worker plugin no longer pollutes normal OpenCode sessions.** The plugin loads for every session in a project, but its worker system prompt, the edit/bash **context gate**, and compaction context were being applied to *all* sessions — which injected worker instructions into normal chats and blocked `edit`/`bash` until `ralph_load_context()` (a call a normal session never makes). These now apply **only to Ralph worker sessions** (identified by the `rlm-worker-attempt-*` session title). In normal sessions the `ralph_*` / `rlm_*` tools are inert (they error if invoked) and `edit`/`bash` are never gated.
+
 ## [0.3.5] - 2026-06-24
 
 ### Changed
