@@ -58,7 +58,8 @@ This installs the local OpenCode wiring:
 ```text
 .opencode/plugins/
 ├── ralph-worker.ts           # re-exports @doeixd/opencode-ralph-rlm/worker-plugin
-└── ralph-session-bridge.ts   # injects session ID on provider HTTP requests
+├── ralph-session-bridge.ts   # injects session ID on provider HTTP requests
+└── ralph-autostart.ts        # auto-starts the provider when OpenCode loads
 .opencode/ralph.json          # verify.command, maxAttempts, swarm caps
 opencode.json                 # ralph-rlm/supervisor provider registration
 ```
@@ -262,19 +263,15 @@ Precedence: env → `ralph-provider.json` → auto-detected OpenCode auth → bu
 
 ---
 
-## Step 7 — Start provider + OpenCode
+## Step 7 — Open OpenCode (the provider auto-starts)
 
-Terminal 1:
-
-```bash
-npx @doeixd/opencode-ralph-rlm serve --worktree .
-```
-
-Terminal 2 (your project):
+With the `ralph-autostart` plugin installed by setup, the provider launches automatically when OpenCode loads — just open OpenCode in your project:
 
 ```bash
 opencode
 ```
+
+> Prefer to run the provider yourself (or used `--no-autostart` / `RALPH_AUTOSTART=0`)? Start it in a separate terminal: `npx @doeixd/opencode-ralph-rlm serve --worktree .`
 
 In the TUI:
 

@@ -1,7 +1,7 @@
 {
   "name": "@doeixd/opencode-ralph-rlm-engine",
   "private": true,
-  "version": "0.3.8",
+  "version": "0.3.9",
   "description": "Ralph RLM loop engine — verify, rollover, OpenCode SDK worker lifecycle",
   "license": "MIT",
   "repository": {

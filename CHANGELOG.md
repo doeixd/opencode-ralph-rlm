@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.3.9] - 2026-06-24
+
+### Added
+
+- **Provider auto-start** — `setup` installs `.opencode/plugins/ralph-autostart.ts`, which launches the Ralph provider when OpenCode loads, so you no longer run `opencode-ralph-rlm serve` by hand. It's idempotent (the `serve` pre-flight reuses a running provider), starts eagerly at OpenCode launch, and logs to `<tmp>/opencode-ralph-rlm/provider.log`. Disable with `setup --no-autostart` or `RALPH_AUTOSTART=0`. (Verified live: OpenCode runs the plugin at launch; the provider comes up and is reused across restarts.)
+- Interview skill + planning playbook: a step on **assumptions** — state them explicitly to the user, record them in a `## Assumptions` section of `PLAN.md`, and add an early milestone to test any load-bearing unverified assumption.
+
 ## [0.3.8] - 2026-06-24
 
 ### Added

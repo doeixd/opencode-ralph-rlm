@@ -41,7 +41,7 @@ function help(): string {
     "opencode-ralph-rlm",
     "",
     "Usage:",
-    "  opencode-ralph-rlm setup [--worktree .] [--port 8787] [--force] [--dry-run]",
+    "  opencode-ralph-rlm setup [--worktree .] [--port 8787] [--force] [--dry-run] [--no-autostart]",
     "  opencode-ralph-rlm serve [--worktree .] [--port 8787] [--opencode-url http://127.0.0.1:4096]",
     "  opencode-ralph-rlm doctor [--worktree .] [--autofix] [--port 8787]",
     "  opencode-ralph-rlm send-message --session <id> --message <text> [--url http://127.0.0.1:8787] [--source <label>] [--no-run] [--no-toast]",
@@ -262,6 +262,7 @@ async function main(): Promise<void> {
       force: hasFlag(args, ["--force"]),
       dryRun: hasFlag(args, ["--dry-run"]),
       writeProviderConfig: hasFlag(args, ["--provider-config"]),
+      autostart: !hasFlag(args, ["--no-autostart"]),
     });
     console.log(formatSetupResult(result));
     return;

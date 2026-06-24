@@ -8,6 +8,8 @@ export type SetupOptions = {
   force?: boolean;
   dryRun?: boolean;
   writeProviderConfig?: boolean;
+  /** Install the provider auto-start plugin (default true). */
+  autostart?: boolean;
 };
 
 export type SetupActionStatus = "created" | "updated" | "skipped" | "would-create" | "would-update";
@@ -31,6 +33,48 @@ const WORKER_PLUGIN = `/**
  * Orchestration lives in the supervisor provider; this plugin is worker-only.
  */
 export { RalphWorkerPlugin, RalphWorkerPlugin as default } from "${PACKAGE_NAME}/worker-plugin";
+`;
+
+const AUTOSTART_PLUGIN = `/**
+ * Ralph provider auto-start.
+ *
+ * Starts the Ralph provider (\`opencode-ralph-rlm serve\`) when OpenCode loads so
+ * you don't have to run it by hand. Idempotent — the serve CLI's pre-flight
+ * check refuses to start a duplicate provider. Disable with RALPH_AUTOSTART=0
+ * (or delete this file). Provider logs go to <tmp>/opencode-ralph-rlm/provider.log.
+ */
+import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
+import { openSync, mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+
+export const RalphAutostartPlugin = async (ctx) => {
+  const flag = (process.env.RALPH_AUTOSTART ?? "").trim().toLowerCase();
+  if (flag === "0" || flag === "false" || flag === "no") return {};
+  try {
+    const cli = join(dirname(createRequire(import.meta.url).resolve("${PACKAGE_NAME}")), "opencode-ralph-rlm.js");
+    const port = process.env.RALPH_PROVIDER_PORT?.trim() || "8787";
+    const wt = ctx?.worktree && ctx.worktree !== "/" ? ctx.worktree : process.cwd();
+    const logDir = join(tmpdir(), "opencode-ralph-rlm");
+    try { mkdirSync(logDir, { recursive: true }); } catch {}
+    const out = openSync(join(logDir, "provider.log"), "a");
+    // Launch with Node (NOT process.execPath — that is the opencode binary here)
+    // and pipe stdio to a file (NOT "ignore" — a detached child with ignored
+    // stdio is killed on Windows). detached + unref lets the provider outlive
+    // OpenCode and be reused on the next launch.
+    const child = spawn("node", [cli, "serve", "--port", port, "--worktree", wt], {
+      detached: true,
+      stdio: ["ignore", out, out],
+    });
+    child.unref();
+  } catch {
+    // best-effort — provider can still be started with \`opencode-ralph-rlm serve\`
+  }
+  return {};
+};
+
+export default RalphAutostartPlugin;
 `;
 
 const SESSION_BRIDGE_PLUGIN = `/**
@@ -281,6 +325,18 @@ export async function setupProject(options: SetupOptions): Promise<SetupResult> 
       "installed session bridge plugin"
     )
   );
+
+  if (options.autostart !== false) {
+    actions.push(
+      await writeManagedFile(
+        worktree,
+        path.join(worktree, ".opencode", "plugins", "ralph-autostart.ts"),
+        AUTOSTART_PLUGIN,
+        options,
+        "installed provider auto-start plugin (disable with RALPH_AUTOSTART=0)"
+      )
+    );
+  }
 
   actions.push(
     await writeManagedFile(

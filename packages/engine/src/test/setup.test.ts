@@ -27,12 +27,23 @@ describe("setupProject", () => {
         "created",
         "created",
         "created",
+        "created",
       ]);
 
       const worker = await Bun.file(
         path.join(worktree, ".opencode", "plugins", "ralph-worker.ts")
       ).text();
       expect(worker).toContain("@doeixd/opencode-ralph-rlm/worker-plugin");
+
+      const autostart = await Bun.file(
+        path.join(worktree, ".opencode", "plugins", "ralph-autostart.ts")
+      ).text();
+      expect(autostart).toContain("serve");
+      expect(autostart).toContain("RALPH_AUTOSTART");
+
+      // --no-autostart skips the auto-start plugin.
+      const noAuto = await setupProject({ worktree, port: 9999, autostart: false, force: true });
+      expect(noAuto.actions.some((a) => a.file.includes("ralph-autostart"))).toBe(false);
 
       const ralph = await Bun.file(path.join(worktree, ".opencode", "ralph.json")).json();
       expect(ralph.verify.command).toEqual(["npm", "test"]);

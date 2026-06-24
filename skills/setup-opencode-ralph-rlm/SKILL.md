@@ -31,6 +31,7 @@ Use this skill to install Ralph RLM into a target repository and make it usable 
 4. Review generated files.
    - `.opencode/plugins/ralph-worker.ts` should re-export `@doeixd/opencode-ralph-rlm/worker-plugin`.
    - `.opencode/plugins/ralph-session-bridge.ts` should inject `x-opencode-session-id` and `directory`.
+   - `.opencode/plugins/ralph-autostart.ts` starts the provider automatically when OpenCode loads (so the user need not run `serve` by hand). Skipped if `setup --no-autostart` was used; disable at runtime with `RALPH_AUTOSTART=0`.
    - `.opencode/ralph.json` should have a realistic `verify.command`.
    - `.opencode/ralph.json` includes `plans: { dir: ".ralph-rlm/plans", active: "default" }` — the named-plan layout. Protocol files (`PLAN.md`, `RLM_INSTRUCTIONS.md`, …) will live under `.ralph-rlm/plans/<name>/`, not the repo root. `opencode-ralph-rlm plan-path` prints the active plan's `PLAN.md` location.
    - `.opencode/ralph.json` may include `fff.enabled` and `fff.scanTimeoutMs`; leave the defaults unless the project cannot load optional native dependencies.
@@ -74,13 +75,13 @@ Use this skill to install Ralph RLM into a target repository and make it usable 
    ```
    or set `RALPH_SUPERVISOR_API_KEY`. Do not start the provider expecting the supervisor to work until at least one credential path exists. See [references/config-files.md](references/config-files.md).
 
-9. Start the provider, then **re-open OpenCode** — and verify the supervisor is ready.
-   ```bash
-   npx @doeixd/opencode-ralph-rlm serve --worktree .
-   ```
-   - **If you just updated Ralph, stop any already-running provider first.** A long-running provider does NOT pick up new code. `serve` pre-flight-checks the port: if a provider is already running it prints its version vs. the one being started and refuses to start a duplicate — stop the old process (or free the port), then re-run `serve`. (If `serve` reports an existing provider, that explains a stale-behavior or "wrong version" symptom.)
-   - Check readiness: `curl http://127.0.0.1:8787/api/health` — `supervisor.ready` should be `true` (it shows the resolved `model`, `source` e.g. `opencode-auth:google`, and the provider `version`). If `false`, follow the `hint` (authenticate a provider or set a key) before delegating goals.
-   - OpenCode loads providers and plugins **at startup**, so the `ralph-rlm/supervisor` model and the `ralph-worker` / `ralph-session-bridge` plugins only appear after the OpenCode TUI is restarted. If OpenCode was open during setup, tell the user to quit and re-open it.
+9. **Re-open OpenCode** — the provider auto-starts; then verify the supervisor is ready.
+   - With the auto-start plugin installed (default), the provider launches automatically when OpenCode loads — **no manual `serve` needed**. OpenCode loads providers and plugins **at startup**, so quit and re-open the OpenCode TUI for the `ralph-rlm/supervisor` model + plugins to take effect.
+   - Check readiness: `curl http://127.0.0.1:8787/api/health` — `supervisor.ready` should be `true` (it shows the resolved `model`, `source` e.g. `opencode-auth:google`, and the provider `version`). If unreachable, the provider may still be starting (give it a moment) or auto-start was disabled — then start it manually:
+     ```bash
+     npx @doeixd/opencode-ralph-rlm serve --worktree .
+     ```
+   - **If you just updated Ralph,** restart so the new version loads. The provider is idempotent (one instance per port, reused), and `serve`'s pre-flight refuses to start a duplicate — if it reports an existing provider of a different version, stop the old one first.
    - Then select the **`ralph-rlm/supervisor`** model.
 
 10. Suggest planning before the first loop.

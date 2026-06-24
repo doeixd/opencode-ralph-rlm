@@ -70,6 +70,7 @@ This creates conservative project-local wiring:
 
 - `.opencode/plugins/ralph-worker.ts`
 - `.opencode/plugins/ralph-session-bridge.ts`
+- `.opencode/plugins/ralph-autostart.ts` — auto-starts the provider when OpenCode loads (skip with `setup --no-autostart`)
 - `.opencode/ralph.json`
 - `opencode.json` provider entry for `ralph-rlm/supervisor`
 
@@ -84,6 +85,8 @@ Manual examples remain in [`.opencode/opencode.provider.example.json`](.opencode
 For full setup options, including manual installation, see [`INSTALLATION.md`](docs/INSTALLATION.md).
 
 ### 3. Start the provider
+
+After setup, the provider **auto-starts when you open OpenCode** (via the `ralph-autostart` plugin) — so you can usually skip this. To run it manually (or if you used `--no-autostart` / `RALPH_AUTOSTART=0`):
 
 ```bash
 npx @doeixd/opencode-ralph-rlm serve
