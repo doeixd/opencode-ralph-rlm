@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.3.10] - 2026-06-24
+
+### Changed
+
+- Setup-skill references now fully document provider auto-start: the `--no-autostart` flag and expected output (`cli.md`), a `.opencode/plugins/ralph-autostart.ts` section (`config-files.md`), and auto-start-aware "provider unreachable" guidance — including the `node`-on-PATH requirement (`troubleshooting.md`).
+
 ## [0.3.9] - 2026-06-24
 
 ### Added

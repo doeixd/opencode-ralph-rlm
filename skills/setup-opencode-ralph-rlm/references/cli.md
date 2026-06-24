@@ -36,12 +36,14 @@ opencode-ralph-rlm plan-path                     # print where the active plan's
 - `--dry-run`: print planned file actions without writing files.
 - `--force`: overwrite generated Ralph-managed files that already exist.
 - `--provider-config`: also create `.opencode/ralph-provider.json`.
+- `--no-autostart`: skip the provider auto-start plugin (`.opencode/plugins/ralph-autostart.ts`).
 
 Expected setup output lists each file action:
 
 ```text
 CREATED: .opencode/plugins/ralph-worker.ts
 CREATED: .opencode/plugins/ralph-session-bridge.ts
+CREATED: .opencode/plugins/ralph-autostart.ts
 CREATED: .opencode/ralph.json
 UPDATED: opencode.json
 ```

@@ -2,9 +2,9 @@
 
 ## `doctor` says provider is unreachable
 
-This is expected before `serve` is running.
+Expected before the provider is running. With the auto-start plugin, opening OpenCode launches it; check `<tmp>/opencode-ralph-rlm/provider.log` and `curl http://127.0.0.1:8787/api/health`.
 
-Start the provider:
+If it never comes up automatically: the auto-start plugin needs **`node` on PATH** (it silently no-ops otherwise), may be disabled (`RALPH_AUTOSTART=0` or `setup --no-autostart`), or OpenCode hasn't been restarted since setup. Start it manually:
 
 ```bash
 npx @doeixd/opencode-ralph-rlm serve --worktree .

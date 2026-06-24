@@ -26,6 +26,17 @@ It should:
 
 If this file is missing, the provider may reject requests as anonymous outside test mode.
 
+## `.opencode/plugins/ralph-autostart.ts`
+
+Purpose: start the Ralph provider automatically when OpenCode loads, so the user doesn't run `opencode-ralph-rlm serve` by hand.
+
+- It spawns `serve` (detached) at OpenCode startup; idempotent — the `serve` pre-flight reuses a running provider, so restarts/multiple projects don't create duplicates.
+- Provider logs go to `<tmp>/opencode-ralph-rlm/provider.log`.
+- Skipped when `setup --no-autostart` is used; disable at runtime with `RALPH_AUTOSTART=0`, or delete this file.
+- If missing/disabled, start the provider manually: `npx @doeixd/opencode-ralph-rlm serve --worktree .`
+
+It is a **self-contained** plugin (not a re-export) because OpenCode bundles plugins, which breaks the package-relative resolution the auto-start needs — so `setup` writes the full inline plugin.
+
 ## `.opencode/ralph.json`
 
 Purpose: loop behavior and stop condition.
