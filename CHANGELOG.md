@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.1] - 2026-06-24
+
+### Added
+
+- **Upstream token streaming.** The supervisor now streams tokens from the model itself — `callSupervisorLlm` parses the upstream provider's SSE and forwards content deltas live — so the final answer appears token-by-token as the model generates it, instead of only after the call returns. Builds on 0.4.0's per-round progress markers. (Unit-tested: content deltas forwarded, tool calls reassembled across deltas.)
+
+### Fixed
+
+- **Worker-model guard.** Ralph now refuses to spawn a worker on the `ralph-rlm` provider (the supervisor) and warns when no worker model is configured. This prevents the failure the smoke loop surfaced: with `worker.providerID`/`worker.modelID` unset, OpenCode could default the worker to the supervisor model, turning the worker into a rogue orchestrator (calling `write_plan`/`stop_loop`) instead of writing code. Documented in the troubleshooting reference.
+
 ## [0.4.0] - 2026-06-24
 
 ### Added

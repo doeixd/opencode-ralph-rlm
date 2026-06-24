@@ -59,6 +59,18 @@ If the target project does not have the package installed locally, install it as
 
 Expected worker tools include `ralph_load_context`, `rlm_file_search`, `rlm_glob`, `rlm_grep`, `rlm_slice`, `ralph_report`, `ralph_verify`, and `ralph_ask`.
 
+## Worker doesn't code / writes a plan or stops the loop instead
+
+The worker must run a real coding model. If `worker.providerID` / `worker.modelID` aren't set in `.opencode/ralph-provider.json`, OpenCode may default the worker to the **`ralph-rlm/supervisor`** model — turning the worker session into a second supervisor that orchestrates (calls `write_plan`, `stop_loop`, etc.) instead of writing code. Symptoms: attempts run but nothing changes, a hallucinated plan replaces yours, or the loop stops with an odd reason.
+
+Fix: set a coding model in `.opencode/ralph-provider.json`:
+
+```json
+{ "worker": { "providerID": "opencode", "modelID": "deepseek-v4-flash-free" } }
+```
+
+Ralph refuses to spawn a worker explicitly pointed at the `ralph-rlm` provider, and logs a warning when no worker model is configured.
+
 ## FFF search acceleration is unavailable
 
 This is non-fatal. `rlm_grep` falls back to Ralph's built-in TypeScript scan.

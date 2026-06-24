@@ -90,12 +90,11 @@ export default defineHandler(async (event): Promise<Response> => {
         // An immediate keep-alive delta so the client shows activity at once.
         controller.enqueue(delta(""));
         try {
-          const turn = await supervisorTurnStreaming(turnInput, (text) =>
+          // Content (model tokens + tool-round markers) streams live via the
+          // progress sink; nothing else to emit afterward.
+          await supervisorTurnStreaming(turnInput, (text) =>
             controller.enqueue(delta(text))
           );
-          for (const piece of (turn.content || "Done.").split(/(\s+)/)) {
-            if (piece) controller.enqueue(delta(piece));
-          }
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           controller.enqueue(delta(`\n\n[error] ${message}`));

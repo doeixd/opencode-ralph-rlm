@@ -51,6 +51,16 @@ export async function loadWorkerSpawnConfig(
 
   const providerID = fromEnv.providerID || worker.providerID?.trim();
   const modelID = fromEnv.modelID || worker.modelID?.trim();
+  // The worker must never run on the supervisor's own provider — that turns the
+  // worker session into a second supervisor (it orchestrates instead of coding).
+  if (providerID === "ralph-rlm") {
+    throw new Error(
+      "Worker model is configured to use the 'ralph-rlm' provider (the supervisor). " +
+        "Workers must run a real coding model — set worker.providerID / worker.modelID in " +
+        ".opencode/ralph-provider.json (e.g. \"opencode\" / \"deepseek-v4-flash-free\"), or the " +
+        "RALPH_WORKER_PROVIDER_ID / RALPH_WORKER_MODEL_ID env vars."
+    );
+  }
   if (providerID && modelID) {
     config.providerID = providerID;
     config.modelID = modelID;

@@ -16,7 +16,7 @@ export default defineHandler(async () => {
   return {
     healthy: true,
     provider: "@doeixd/opencode-ralph-rlm",
-    version: "0.4.0",
+    version: "0.4.1",
     opencode: {
       baseUrl: runtime.baseUrl,
       ...opencode,

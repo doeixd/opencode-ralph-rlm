@@ -185,7 +185,14 @@ async function runLlmTurn(
   let toolRounds = 0;
 
   for (let round = 0; round < config.maxToolRounds; round += 1) {
-    const result = await callSupervisorLlm(config, conversation, SUPERVISOR_TOOL_DEFINITIONS);
+    // Pass onProgress as the token sink so the final answer (and any per-round
+    // text) streams live from the upstream model.
+    const result = await callSupervisorLlm(
+      config,
+      conversation,
+      SUPERVISOR_TOOL_DEFINITIONS,
+      onProgress
+    );
 
     if (result.toolCalls.length === 0) {
       return {
@@ -229,11 +236,10 @@ async function runLlmTurn(
   }
 
   const status = await executeSupervisorTool("loop_status", {}, ctx);
-  return {
-    content: `I've taken several steps but haven't fully wrapped up this turn. Current status:\n${status}\n\nAsk me to continue if you'd like me to keep going.`,
-    toolRounds,
-    mode: "llm",
-  };
+  const limitMessage = `I've taken several steps but haven't fully wrapped up this turn. Current status:\n${status}\n\nAsk me to continue if you'd like me to keep going.`;
+  // Not streamed from the model (constructed here), so emit it to the sink.
+  onProgress?.(limitMessage);
+  return { content: limitMessage, toolRounds, mode: "llm" };
 }
 
 /**
@@ -286,7 +292,13 @@ export async function supervisorTurnStreaming(
     worktree: input.worktree,
   };
 
-  return withSessionTurnLock(input.sessionKey, () =>
-    isTestMode() ? runTestModeTurn(input, ctx) : runLlmTurn(input, ctx, onProgress)
-  );
+  return withSessionTurnLock(input.sessionKey, async () => {
+    if (isTestMode()) {
+      // Test mode has no upstream stream; emit the scripted content as one delta.
+      const result = await runTestModeTurn(input, ctx);
+      onProgress(result.content);
+      return result;
+    }
+    return runLlmTurn(input, ctx, onProgress);
+  });
 }

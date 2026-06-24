@@ -225,6 +225,17 @@ export function createLoopEngine(
 
   async function spawnWorker(attempt: number): Promise<string> {
     const spawnConfig = await loadWorkerSpawnConfig(state.worktree, templates);
+    // Footgun guard: with no worker model set, OpenCode picks its default — which
+    // can resolve to the ralph-rlm supervisor, turning the worker into a rogue
+    // orchestrator that never writes code. Warn once per run so it's visible.
+    if ((!spawnConfig.providerID || !spawnConfig.modelID) && attempt === 1) {
+      console.warn(
+        "[ralph] No worker model configured. Set worker.providerID / worker.modelID in " +
+          ".opencode/ralph-provider.json (e.g. \"opencode\" / \"deepseek-v4-flash-free\"). " +
+          "Otherwise the worker uses OpenCode's default model, which may be the ralph-rlm " +
+          "supervisor — in which case workers will not code."
+      );
+    }
     const created = await runtime.client.session.create({
       title: `rlm-worker-attempt-${attempt}`,
       directory: state.worktree,
