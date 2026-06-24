@@ -32,16 +32,6 @@ You:   status?
 Ralph: Done — verify passed on attempt 2. Summary is in CONVERSATION.md.
 ```
 
-| Doc | Start here if you want to… |
-|-----|----------|
-| [`GETTINGSTARTEDGUIDE.md`](docs/GETTINGSTARTEDGUIDE.md) | **Set it up and run your first loop** (start here) |
-| [`INSTALLATION.md`](docs/INSTALLATION.md) | Compare install paths (agent skill, CLI, manual) |
-| [`MIGRATION.md`](docs/MIGRATION.md) | Upgrade from the v0.1 plugin |
-| [`CHANGELOG.md`](CHANGELOG.md) | See what changed |
-| [DeepWiki](https://deepwiki.com/doeixd/opencode-ralph-rlm) | Browse / ask questions about the codebase |
-
-The rest of this README is reference material — tools, config, the management API, and how it works under the hood. New here? Follow the [getting-started guide](docs/GETTINGSTARTEDGUIDE.md) instead, or [ask DeepWiki](https://deepwiki.com/doeixd/opencode-ralph-rlm) anything about the code.
-
 
 ## Quick start
 
@@ -131,6 +121,19 @@ npx @doeixd/opencode-ralph-rlm doctor --worktree .
 # automated HTTP smoke (provider must be running with RALPH_TEST_MODE=1, or use --spawn):
 bun run e2e-smoke -- --spawn
 ```
+
+
+## Documentation
+
+| Doc | Start here if you want to… |
+|-----|----------|
+| [`GETTINGSTARTEDGUIDE.md`](docs/GETTINGSTARTEDGUIDE.md) | **Set it up and run your first loop** (start here) |
+| [`INSTALLATION.md`](docs/INSTALLATION.md) | Compare install paths (agent skill, CLI, manual) |
+| [`MIGRATION.md`](docs/MIGRATION.md) | Upgrade from the v0.1 plugin |
+| [`CHANGELOG.md`](CHANGELOG.md) | See what changed |
+| [DeepWiki](https://deepwiki.com/doeixd/opencode-ralph-rlm) | Browse / ask questions about the codebase |
+
+The rest of this README is reference material — tools, config, the management API, and how it works under the hood. New here? Follow the [getting-started guide](docs/GETTINGSTARTEDGUIDE.md) instead, or [ask DeepWiki](https://deepwiki.com/doeixd/opencode-ralph-rlm) anything about the code.
 
 
 ## Plan before the loop
