@@ -90,9 +90,27 @@ Preserve any existing providers. Do not replace the whole file unless the user a
 
 ## Optional `.opencode/ralph-provider.json`
 
-Purpose: repo-local supervisor and worker defaults.
+Purpose: repo-local supervisor and worker model defaults.
 
-Use only when needed. Environment variables are simpler for supervisor credentials:
+```json
+{
+  "supervisor": {
+    "baseUrl": "https://api.openai.com/v1",
+    "modelID": "REPLACE-with-a-strong-reasoning-model",
+    "maxToolRounds": 8
+  },
+  "worker": {
+    "agent": "build",
+    "modelID": "REPLACE-with-a-capable-coding-model"
+  }
+}
+```
+
+- **`supervisor.modelID` / `baseUrl`** — the LLM the provider calls for orchestration turns. `setup --provider-config` scaffolds this with a `gpt-4o-mini` placeholder; replace it with a model the user actually wants (and authenticate it). The API key comes from `RALPH_SUPERVISOR_API_KEY` (env) — keep secrets out of this file.
+- **`worker.modelID` / `worker.agent`** — what the spawned OpenCode worker sessions use to write code. If omitted, workers use OpenCode's configured default model.
+
+Pick models the user already has in OpenCode (`opencode auth list`, or their `opencode.json` providers). Supervisor credentials can also come from environment variables instead of this file:
 
 - `RALPH_SUPERVISOR_API_KEY`
 - `RALPH_SUPERVISOR_MODEL`
+- `RALPH_SUPERVISOR_BASE_URL`

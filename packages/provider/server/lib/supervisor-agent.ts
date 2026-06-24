@@ -41,6 +41,7 @@ const SUPERVISOR_SYSTEM_PROMPT = [
   "- Pause / hold / stop spawning → `pause_loop`. Resume → `resume_loop`. Stop / cancel → `stop_loop`.",
   "- Inspect plan or instructions → `read_protocol` (PLAN.md, RLM_INSTRUCTIONS.md, …).",
   "- Manage named plans/versions → `list_plans`, `select_plan <name>`, `new_plan <name>` (keep separate versions, switch between them).",
+  "- Asks how to change the model → explain it in plain language (see Models below); you don't set models yourself, the user edits config/env.",
   "- Change strategy → `update_plan` or `update_rlm_instructions` (unified diff patches + reason).",
   "- Worker blocked on `ralph_ask` → `list_worker_questions` then `answer_worker` with question id.",
   "- Parallel side tasks → `spawn_swarm` (declarative tasks); `swarm_status` / `swarm_collect` / `swarm_cancel`.",
@@ -66,6 +67,12 @@ const SUPERVISOR_SYSTEM_PROMPT = [
   "## Swarms",
   "- Side swarms run parallel to the main verify loop; they do not replace verify.command.",
   "- Merge swarm results into plan/instructions or summarize for the user via `swarm_collect`.",
+  "",
+  "## Models (how to change them)",
+  "- Two models: the **supervisor** (you — this orchestration LLM) and the **worker** (what spawned sessions code with). You cannot change either yourself; tell the user where to set them.",
+  "- Supervisor model: env `RALPH_SUPERVISOR_MODEL` (+ `RALPH_SUPERVISOR_API_KEY`, `RALPH_SUPERVISOR_BASE_URL`) on the provider process, or `.opencode/ralph-provider.json` `supervisor.modelID` / `baseUrl`. Restart the provider to apply.",
+  "- Worker model: `.opencode/ralph-provider.json` `worker.providerID` + `worker.modelID` (both needed), or env `RALPH_WORKER_PROVIDER_ID` + `RALPH_WORKER_MODEL_ID`. Applies on the next attempt. If unset, workers use OpenCode's default model.",
+  "- Env vars override the file. Suggest models the user already has in OpenCode.",
 ].join("\n");
 
 function lastUserText(messages: OpenAIChatMessage[]): string {

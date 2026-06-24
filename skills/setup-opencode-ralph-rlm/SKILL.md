@@ -54,13 +54,27 @@ Use this skill to install Ralph RLM into a target repository and make it usable 
    A provider warning is expected until the provider is running.
    For failures, read [references/troubleshooting.md](references/troubleshooting.md).
 
-8. Start the provider when the user is ready.
+8. Choose models for the supervisor and the workers — **ask the user; do not silently accept the `gpt-4o-mini` default.**
+
+   There are two separate model decisions:
+   - **Supervisor** — the LLM the provider calls for orchestration turns (planning interview, tool routing, status summaries). Set on the **provider process** via `RALPH_SUPERVISOR_API_KEY` / `RALPH_SUPERVISOR_MODEL` / `RALPH_SUPERVISOR_BASE_URL`, or in `.opencode/ralph-provider.json` under `supervisor`. Any OpenAI-compatible endpoint works. Prefer a strong reasoning model — it plans and steers.
+   - **Worker** — the model the spawned OpenCode worker sessions use to actually write code. Set in `.opencode/ralph-provider.json` under `worker.agent` / `worker.modelID`; if unset, workers use OpenCode's configured default. Prefer a capable coding model.
+
+   Pick from what the user already has in OpenCode rather than guessing:
+   - List authenticated providers/models: `opencode auth list`.
+   - Inspect the project `opencode.json` and the global OpenCode config for configured `provider` / `model` entries.
+   - Propose a sensible pair (strong model for supervisor, capable coding model for worker) and **confirm with the user**. If it is ambiguous which provider/model they want, ask.
+
+   Then record the choices: export the supervisor env vars, and/or write `.opencode/ralph-provider.json` (`npx @doeixd/opencode-ralph-rlm setup --provider-config` scaffolds it — edit the placeholder model ids). See [references/config-files.md](references/config-files.md).
+
+9. Start the provider, then **re-open OpenCode**.
    ```bash
    npx @doeixd/opencode-ralph-rlm serve --worktree .
    ```
-   Then open OpenCode and select `ralph-rlm/supervisor`.
+   - OpenCode loads providers and plugins **at startup**, so the `ralph-rlm/supervisor` model and the `ralph-worker` / `ralph-session-bridge` plugins only become available after the OpenCode TUI is restarted. If OpenCode was already open during setup, tell the user to quit and re-open it.
+   - Then select the **`ralph-rlm/supervisor`** model.
 
-9. Suggest planning before the first loop.
+10. Suggest planning before the first loop.
    - A loop is only as good as its `PLAN.md`. Recommend planning the goal with the supervisor (it runs an interview before `start_loop`) or via the `interview-and-create-plan` skill, rather than delegating a one-line goal cold.
 
 ## Notes
