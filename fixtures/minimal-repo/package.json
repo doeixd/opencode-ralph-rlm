@@ -1,8 +1,0 @@
-{
-  "name": "ralph-minimal-fixture",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "verify": "node scripts/verify.mjs"
-  }
-}

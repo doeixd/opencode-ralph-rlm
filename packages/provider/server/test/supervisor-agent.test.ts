@@ -6,8 +6,11 @@ import { supervisorTurn } from "../lib/supervisor-agent.js";
 import { loopRegistry } from "../lib/loop-registry.js";
 import { getOpencodeRuntime } from "../lib/runtime.js";
 import { createProviderMockRuntime, mockSubscribe } from "./mock-runtime.js";
+import { ensureMinimalRepoFixture } from "./minimal-repo-fixture.js";
 
-const fixtureRoot = path.resolve(import.meta.dirname, "../../../../fixtures/minimal-repo");
+const fixtureRoot = await ensureMinimalRepoFixture(
+  path.resolve(import.meta.dirname, "../../../../fixtures/minimal-repo")
+);
 
 describe("supervisorTurn (RALPH_TEST_MODE)", () => {
   let worktree: string;

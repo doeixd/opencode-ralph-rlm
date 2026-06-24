@@ -11,8 +11,11 @@ import {
   readTextFile,
 } from "@doeixd/opencode-ralph-rlm-engine";
 import { createProviderMockRuntime, mockSubscribe } from "./mock-runtime.js";
+import { ensureMinimalRepoFixture } from "./minimal-repo-fixture.js";
 
-const fixtureRoot = path.resolve(import.meta.dirname, "../../../../fixtures/minimal-repo");
+const fixtureRoot = await ensureMinimalRepoFixture(
+  path.resolve(import.meta.dirname, "../../../../fixtures/minimal-repo")
+);
 
 describe("injectSupervisorMessage (RALPH_TEST_MODE)", () => {
   let worktree: string;

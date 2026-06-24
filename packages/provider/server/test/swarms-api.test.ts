@@ -6,8 +6,11 @@ import { executeSupervisorTool } from "../lib/supervisor-tools.js";
 import { swarmRegistry } from "../lib/swarm-registry.js";
 import { requireSwarm } from "../lib/swarms-api.js";
 import { createProviderMockRuntime, mockSubscribe } from "./mock-runtime.js";
+import { ensureMinimalRepoFixture } from "./minimal-repo-fixture.js";
 
-const fixtureRoot = path.resolve(import.meta.dirname, "../../../../fixtures/minimal-repo");
+const fixtureRoot = await ensureMinimalRepoFixture(
+  path.resolve(import.meta.dirname, "../../../../fixtures/minimal-repo")
+);
 
 describe("swarms API and spawn_swarm tool", () => {
   let worktree: string;

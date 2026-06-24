@@ -2,8 +2,11 @@ import path from "node:path";
 import { describe, expect, test } from "bun:test";
 import { loadConfig } from "../config.js";
 import { runAndParseVerify } from "../verify.js";
+import { ensureMinimalRepoFixture } from "./minimal-repo-fixture.js";
 
-const fixtureRoot = path.resolve(import.meta.dirname, "../../../../fixtures/minimal-repo");
+const fixtureRoot = await ensureMinimalRepoFixture(
+  path.resolve(import.meta.dirname, "../../../../fixtures/minimal-repo")
+);
 
 describe("runAndParseVerify", () => {
   test("fails when pass marker is missing", async () => {

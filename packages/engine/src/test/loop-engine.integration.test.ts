@@ -9,8 +9,11 @@ import { loadPlanContext } from "../protocol-files.js";
 import { stateFilePath } from "../plan-paths.js";
 import { fileExists } from "../fs.js";
 import { createMockRuntime, mockSubscribe } from "./mock-runtime.js";
+import { ensureMinimalRepoFixture } from "./minimal-repo-fixture.js";
 
-const fixtureRoot = path.resolve(import.meta.dirname, "../../../../fixtures/minimal-repo");
+const fixtureRoot = await ensureMinimalRepoFixture(
+  path.resolve(import.meta.dirname, "../../../../fixtures/minimal-repo")
+);
 
 async function makeFixtureCopy(): Promise<string> {
   const root = await mkdtemp(path.join(tmpdir(), "ralph-loop-"));

@@ -4,8 +4,11 @@ import { tmpdir } from "node:os";
 import { describe, expect, test } from "bun:test";
 import { LoopRegistry } from "../loop-registry.js";
 import { createMockRuntime, mockSubscribe } from "./mock-runtime.js";
+import { ensureMinimalRepoFixture } from "./minimal-repo-fixture.js";
 
-const fixtureRoot = path.resolve(import.meta.dirname, "../../../../fixtures/minimal-repo");
+const fixtureRoot = await ensureMinimalRepoFixture(
+  path.resolve(import.meta.dirname, "../../../../fixtures/minimal-repo")
+);
 
 describe("LoopRegistry", () => {
   test("list returns synchronous snapshots", async () => {

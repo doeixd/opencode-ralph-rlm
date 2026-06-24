@@ -46,3 +46,6 @@ fixtures/minimal-repo/
 
 # Ephemeral npm auth (bin/publish-npm.ts)
 .npmrc
+
+# Test fixtures are generated at test time (ensureMinimalRepoFixture)
+fixtures/
