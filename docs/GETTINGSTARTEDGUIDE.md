@@ -241,20 +241,23 @@ For most projects, **editing `RLM_INSTRUCTIONS.md` and `PLAN.md`** after the fir
 
 ## Step 6 — Supervisor LLM credentials
 
-The provider calls an external LLM for supervisor chat turns (separate from your worker model).
+The provider calls an LLM for supervisor chat turns (separate from your worker model).
 
-**Option A — environment variables**
+**Option A — reuse OpenCode auth (zero config).** If you've authenticated a keyed provider in OpenCode (e.g. Google or OpenCode Zen via `opencode auth login`), the provider auto-detects it — nothing to set. Verify with `curl http://127.0.0.1:8787/api/health` → `supervisor.ready: true` (and the resolved `model` / `source`).
+
+**Option B — environment variables** (to force a specific provider/model)
 
 ```bash
 export RALPH_SUPERVISOR_API_KEY="sk-..."
 export RALPH_SUPERVISOR_MODEL="gpt-4o-mini"
+# export RALPH_SUPERVISOR_BASE_URL="https://api.openai.com/v1"   # for non-OpenAI endpoints
 ```
 
-**Option B — `.opencode/ralph-provider.json`**
+**Option C — `.opencode/ralph-provider.json`**
 
-See [`.opencode/ralph-provider.example.json`](../.opencode/ralph-provider.example.json) for supervisor + worker agent defaults.
+See [`.opencode/ralph-provider.example.json`](../.opencode/ralph-provider.example.json). Workers run *through* OpenCode and use its default model unless you pin `worker.providerID` + `worker.modelID` (e.g. a free model like `opencode` / `deepseek-v4-flash-free`).
 
-Worker sessions use `worker.agent` / `worker.modelID` from this file when the engine spawns them.
+Precedence: env → `ralph-provider.json` → auto-detected OpenCode auth → built-in default.
 
 ---
 

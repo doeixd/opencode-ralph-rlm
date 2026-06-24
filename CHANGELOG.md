@@ -4,6 +4,17 @@ All notable changes to this project are documented here.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Added
+
+- **Supervisor credential auto-detect** — when no `RALPH_SUPERVISOR_API_KEY` (or `ralph-provider.json` key) is set, the provider falls back to OpenCode's own auth (`~/.local/share/opencode/auth.json`), using a keyed provider you've already authenticated (e.g. Google, OpenCode Zen). So an OpenCode user usually needs no separate supervisor key. Precedence: env → `ralph-provider.json` → OpenCode auth → built-in default.
+- **`GET /api/health` reports supervisor readiness** — `supervisor.ready`, the resolved `model`, and `source` (`env` / `opencode-auth:<provider>` / `default`), with a `hint` when no credential is found. The setup skill uses this to verify before launching.
+
+### Changed
+
+- Setup skill is now discovery-driven: it inspects `opencode auth list` / `opencode models`, relies on auto-detect for the supervisor, recommends (does not force) a free OpenCode model for workers, and directs the user to authenticate (`opencode auth login`) if nothing usable is found — before starting the provider. Added a re-open-OpenCode step.
+
 ## [0.3.0] - 2026-06-24
 
 ### Added

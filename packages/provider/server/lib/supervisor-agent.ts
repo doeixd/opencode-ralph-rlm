@@ -71,6 +71,7 @@ const SUPERVISOR_SYSTEM_PROMPT = [
   "## Models (how to change them)",
   "- Two models: the **supervisor** (you — this orchestration LLM) and the **worker** (what spawned sessions code with). You cannot change either yourself; tell the user where to set them.",
   "- Supervisor model: env `RALPH_SUPERVISOR_MODEL` (+ `RALPH_SUPERVISOR_API_KEY`, `RALPH_SUPERVISOR_BASE_URL`) on the provider process, or `.opencode/ralph-provider.json` `supervisor.modelID` / `baseUrl`. Restart the provider to apply.",
+  "- If no supervisor key is set, the provider auto-detects one from the user's OpenCode auth (a keyed provider they've already authenticated, e.g. via `opencode auth login`). So 'I have no API key' usually means: authenticate a provider in OpenCode, or set RALPH_SUPERVISOR_API_KEY.",
   "- Worker model: `.opencode/ralph-provider.json` `worker.providerID` + `worker.modelID` (both needed), or env `RALPH_WORKER_PROVIDER_ID` + `RALPH_WORKER_MODEL_ID`. Applies on the next attempt. If unset, workers use OpenCode's default model.",
   "- Env vars override the file. Suggest models the user already has in OpenCode.",
 ].join("\n");

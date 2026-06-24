@@ -90,7 +90,7 @@ Preserve any existing providers. Do not replace the whole file unless the user a
 
 ## Optional `.opencode/ralph-provider.json`
 
-Purpose: repo-local supervisor and worker model defaults.
+Purpose: pin a specific supervisor and/or worker model. **Usually not needed** — see the auto-detect note below.
 
 ```json
 {
@@ -101,16 +101,19 @@ Purpose: repo-local supervisor and worker model defaults.
   },
   "worker": {
     "agent": "build",
-    "modelID": "REPLACE-with-a-capable-coding-model"
+    "providerID": "opencode",
+    "modelID": "deepseek-v4-flash-free"
   }
 }
 ```
 
-- **`supervisor.modelID` / `baseUrl`** — the LLM the provider calls for orchestration turns. `setup --provider-config` scaffolds this with a `gpt-4o-mini` placeholder; replace it with a model the user actually wants (and authenticate it). The API key comes from `RALPH_SUPERVISOR_API_KEY` (env) — keep secrets out of this file.
-- **`worker.modelID` / `worker.agent`** — what the spawned OpenCode worker sessions use to write code. If omitted, workers use OpenCode's configured default model.
+- **Supervisor credentials auto-detect.** If no key is set via `RALPH_SUPERVISOR_API_KEY` or this file, the provider falls back to OpenCode's own auth (`~/.local/share/opencode/auth.json`) — a keyed provider you've authenticated (e.g. Google, OpenCode Zen). So if the user has authenticated a provider in OpenCode, **no supervisor config is needed**. Only set `supervisor.modelID` / `baseUrl` (key via `RALPH_SUPERVISOR_API_KEY` env — keep secrets out of this file) to force a specific provider/model.
+- **`worker.providerID` + `worker.modelID`** — what spawned OpenCode worker sessions code with (both required). If omitted, workers use OpenCode's configured default model. To run coding on a free model, set a free OpenCode model such as `opencode` / `deepseek-v4-flash-free` (recommend this, don't force it).
 
-Pick models the user already has in OpenCode (`opencode auth list`, or their `opencode.json` providers). Supervisor credentials can also come from environment variables instead of this file:
+Discover what's available with `opencode auth list` and `opencode models`. Supervisor credentials can also come from environment variables instead of this file:
 
 - `RALPH_SUPERVISOR_API_KEY`
 - `RALPH_SUPERVISOR_MODEL`
 - `RALPH_SUPERVISOR_BASE_URL`
+
+Verify readiness after starting the provider: `curl http://127.0.0.1:8787/api/health` shows `supervisor.ready`, the resolved `model`, and `source` (e.g. `opencode-auth:google`, `env`, or `default`).

@@ -54,24 +54,32 @@ Use this skill to install Ralph RLM into a target repository and make it usable 
    A provider warning is expected until the provider is running.
    For failures, read [references/troubleshooting.md](references/troubleshooting.md).
 
-8. Choose models for the supervisor and the workers — **ask the user; do not silently accept the `gpt-4o-mini` default.**
+8. Set up models — **discover what the user already has first; only ask if nothing usable is found.**
 
-   There are two separate model decisions:
-   - **Supervisor** — the LLM the provider calls for orchestration turns (planning interview, tool routing, status summaries). Set on the **provider process** via `RALPH_SUPERVISOR_API_KEY` / `RALPH_SUPERVISOR_MODEL` / `RALPH_SUPERVISOR_BASE_URL`, or in `.opencode/ralph-provider.json` under `supervisor`. Any OpenAI-compatible endpoint works. Prefer a strong reasoning model — it plans and steers.
-   - **Worker** — the model the spawned OpenCode worker sessions use to actually write code. Set in `.opencode/ralph-provider.json` under `worker.agent` / `worker.modelID`; if unset, workers use OpenCode's configured default. Prefer a capable coding model.
+   There are two model decisions:
+   - **Supervisor** — the LLM the provider calls for orchestration (planning interview, tool routing, status). Needs reliable function/tool-calling.
+   - **Worker** — the model spawned OpenCode sessions use to write code. Workers run *through* OpenCode, so they already use OpenCode's providers/auth.
 
-   Pick from what the user already has in OpenCode rather than guessing:
-   - List authenticated providers/models: `opencode auth list`.
-   - Inspect the project `opencode.json` and the global OpenCode config for configured `provider` / `model` entries.
-   - Propose a sensible pair (strong model for supervisor, capable coding model for worker) and **confirm with the user**. If it is ambiguous which provider/model they want, ask.
+   Discover existing credentials/models before configuring anything:
+   - `opencode auth list` — which providers are authenticated.
+   - `opencode models` — available model ids (e.g. `opencode/deepseek-v4-flash-free`, `anthropic/claude-*`).
 
-   Then record the choices: export the supervisor env vars, and/or write `.opencode/ralph-provider.json` (`npx @doeixd/opencode-ralph-rlm setup --provider-config` scaffolds it — edit the placeholder model ids). See [references/config-files.md](references/config-files.md).
+   **Supervisor:** if the user has a keyed provider authenticated in OpenCode (e.g. Google, OpenCode Zen), the provider **auto-detects** it — no separate key needed. So usually you do nothing here. Only set `RALPH_SUPERVISOR_API_KEY` (+ `RALPH_SUPERVISOR_MODEL` / `RALPH_SUPERVISOR_BASE_URL`) or `.opencode/ralph-provider.json` `supervisor` if the user wants a specific provider/model, or if no keyed provider is authenticated.
 
-9. Start the provider, then **re-open OpenCode**.
+   **Worker:** leaving it unset is fine — workers use OpenCode's configured default model. To run coding on a free model, **recommend** (don't force) setting `.opencode/ralph-provider.json` `worker.providerID` + `worker.modelID` to a free OpenCode model such as `opencode` / `deepseek-v4-flash-free`. Confirm with the user before writing it.
+
+   **If nothing usable is found** (no authenticated provider, no key): direct the user to authenticate before launching, e.g.:
+   ```bash
+   opencode auth login
+   ```
+   or set `RALPH_SUPERVISOR_API_KEY`. Do not start the provider expecting the supervisor to work until at least one credential path exists. See [references/config-files.md](references/config-files.md).
+
+9. Start the provider, then **re-open OpenCode** — and verify the supervisor is ready.
    ```bash
    npx @doeixd/opencode-ralph-rlm serve --worktree .
    ```
-   - OpenCode loads providers and plugins **at startup**, so the `ralph-rlm/supervisor` model and the `ralph-worker` / `ralph-session-bridge` plugins only become available after the OpenCode TUI is restarted. If OpenCode was already open during setup, tell the user to quit and re-open it.
+   - Check readiness: `curl http://127.0.0.1:8787/api/health` — `supervisor.ready` should be `true` (it shows the resolved `model` and `source`, e.g. `opencode-auth:google`). If `false`, follow the `hint` (authenticate a provider or set a key) before delegating goals.
+   - OpenCode loads providers and plugins **at startup**, so the `ralph-rlm/supervisor` model and the `ralph-worker` / `ralph-session-bridge` plugins only appear after the OpenCode TUI is restarted. If OpenCode was open during setup, tell the user to quit and re-open it.
    - Then select the **`ralph-rlm/supervisor`** model.
 
 10. Suggest planning before the first loop.

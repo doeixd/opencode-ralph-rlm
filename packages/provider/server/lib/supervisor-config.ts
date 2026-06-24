@@ -1,11 +1,14 @@
 import path from "node:path";
 import { readTextFile, fileExists } from "@doeixd/opencode-ralph-rlm-engine";
+import { detectOpencodeSupervisorCreds } from "./opencode-auth.js";
 
 export type SupervisorLlmConfig = {
   baseUrl: string;
   apiKey: string;
   model: string;
   maxToolRounds: number;
+  /** Where the credentials came from: "env" | "file" | "opencode-auth:<provider>" | "default". */
+  source: string;
 };
 
 export type ProviderConfigFile = {
@@ -31,21 +34,36 @@ export async function loadSupervisorLlmConfig(
 ): Promise<SupervisorLlmConfig> {
   const fileConfig = await readProviderConfigFile(worktree);
 
+  const envKey = process.env.RALPH_SUPERVISOR_API_KEY?.trim();
+  const fileKey = fileConfig.supervisor?.apiKey?.trim();
+
+  // If no key is configured via env or ralph-provider.json, fall back to
+  // OpenCode's own auth (a keyed provider you've already authenticated), so the
+  // supervisor works without a separate RALPH_SUPERVISOR_API_KEY.
+  const auto = !envKey && !fileKey ? await detectOpencodeSupervisorCreds() : null;
+
   const baseUrl =
     process.env.RALPH_SUPERVISOR_BASE_URL?.trim() ||
     fileConfig.supervisor?.baseUrl?.trim() ||
+    auto?.baseUrl ||
     DEFAULT_BASE_URL;
 
-  const apiKey =
-    process.env.RALPH_SUPERVISOR_API_KEY?.trim() ||
-    fileConfig.supervisor?.apiKey?.trim() ||
-    "";
+  const apiKey = envKey || fileKey || auto?.apiKey || "";
 
   const model =
     process.env.RALPH_SUPERVISOR_MODEL?.trim() ||
     fileConfig.supervisor?.modelID?.trim() ||
     fileConfig.supervisor?.model?.trim() ||
+    auto?.model ||
     DEFAULT_MODEL;
+
+  const source = envKey
+    ? "env"
+    : fileKey
+      ? "file"
+      : auto
+        ? auto.source
+        : "default";
 
   const maxToolRounds = toBoundedInt(
     fileConfig.supervisor?.maxToolRounds ??
@@ -55,7 +73,7 @@ export async function loadSupervisorLlmConfig(
     24
   );
 
-  return { baseUrl: baseUrl.replace(/\/$/, ""), apiKey, model, maxToolRounds };
+  return { baseUrl: baseUrl.replace(/\/$/, ""), apiKey, model, maxToolRounds, source };
 }
 
 async function readProviderConfigFile(worktree: string): Promise<ProviderConfigFile> {

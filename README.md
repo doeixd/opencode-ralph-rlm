@@ -91,14 +91,14 @@ npx @doeixd/opencode-ralph-rlm serve
 #           --worktree /path/to/your/repo
 ```
 
-Supervisor LLM credentials (provider process):
+Supervisor LLM credentials (provider process). **If you've already authenticated a keyed provider in OpenCode** (e.g. Google, OpenCode Zen via `opencode auth login`), the provider auto-detects it — no extra config needed. To force a specific provider/model instead:
 
 ```bash
 export RALPH_SUPERVISOR_API_KEY="..."
-export RALPH_SUPERVISOR_MODEL="gpt-4o-mini"
+export RALPH_SUPERVISOR_MODEL="gpt-4o-mini"   # + RALPH_SUPERVISOR_BASE_URL for non-OpenAI endpoints
 ```
 
-Or `.opencode/ralph-provider.json` — see [`.opencode/ralph-provider.example.json`](.opencode/ralph-provider.example.json).
+Or `.opencode/ralph-provider.json` — see [`.opencode/ralph-provider.example.json`](.opencode/ralph-provider.example.json). Check what resolved with `curl http://127.0.0.1:8787/api/health` (`supervisor.ready` / `model` / `source`).
 
 ### 4. OpenCode + supervisor model
 
