@@ -219,7 +219,8 @@ v0.2 does not require you to write supervisor or worker prompts from scratch. De
 
 ### What the supervisor is told to do
 
-- Plan first: when you delegate a goal and no authored plan exists, interview you and `write_plan` before `start_loop` (unless you say to skip).
+- Plan first: when you delegate a goal and no authored plan exists, interview you, `write_plan`, and agree a strong `verify.command` before `start_loop` (unless you say to skip).
+- Develop/validate the stop condition → `get_verify` / `set_verify` / `run_verify` (a good `verify.command` should fail before the work is done).
 - Delegate goals → `start_loop`; status questions → `loop_status`; control → pause/resume/stop tools.
 - Manage named plans/versions → `list_plans` / `select_plan` / `new_plan`.
 - Never edit repo code or mention legacy v0.1 tools (`ralph_spawn_worker`, etc.).

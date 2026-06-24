@@ -17,8 +17,11 @@ import {
   protocolFilePath,
   readActivePlan,
   readPendingInput,
+  readRawConfig,
   readTextFile,
   resolvePlanContext,
+  runAndParseVerify,
+  updateRawConfig,
   writeActivePlan,
   writePlanFile,
   type LoopEngine,
@@ -179,6 +182,46 @@ export const SUPERVISOR_TOOL_DEFINITIONS: OpenAIToolDefinition[] = [
         required: ["query"],
         additionalProperties: false,
       },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_verify",
+      description:
+        "Read the current verify.command (the loop's single stop condition) + cwd + timeout from ralph.json.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "set_verify",
+      description:
+        "Set verify.command in ralph.json — the command the loop runs to decide 'done' (exit 0 = pass). Develop a strong one WITH the user: it must genuinely test the goal (not just exit 0), be deterministic, and fail before the work is done. Validate with run_verify first.",
+      parameters: {
+        type: "object",
+        properties: {
+          command: {
+            type: "array",
+            items: { type: "string" },
+            description: "Argv array, e.g. [\"npm\",\"test\"] or [\"bash\",\"-c\",\"npm run lint && npm test\"].",
+          },
+          cwd: { type: "string", description: "Working directory relative to the repo (default '.')." },
+          timeoutMinutes: { type: "integer", minimum: 0, maximum: 240, description: "0 = no timeout." },
+        },
+        required: ["command"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "run_verify",
+      description:
+        "Run verify.command once, OUT of the loop, and return the verdict + output. Use to validate the command with the user — e.g. confirm it FAILS before the work is done (so a future pass is meaningful) and isn't trivially passing.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
     },
   },
   {
@@ -541,6 +584,14 @@ export async function executeSupervisorTool(
 
       const authoredPlan = await isPlanAuthored(await loadPlanContext(ctx.worktree));
 
+      // verify.command is the loop's only automatic stop condition. Warn (but
+      // don't block) when it's missing — the loop would never auto-complete.
+      const startCfg = await loadConfig(ctx.worktree);
+      const verifyWarning =
+        !startCfg.verify || startCfg.verify.command.length === 0
+          ? "No verify.command set — the loop has NO automatic stop condition and will run until maxAttempts. Strongly recommend set_verify (validate with run_verify) before relying on it."
+          : undefined;
+
       await engine.start({
         sessionId: ctx.sessionKey,
         worktree: ctx.worktree,
@@ -556,6 +607,7 @@ export async function executeSupervisorTool(
           message: authoredPlan
             ? `Started loop against the authored PLAN.md — attempt ${status.attempt} running in background.`
             : `Started loop — attempt ${status.attempt} running in background.`,
+          ...(verifyWarning ? { warning: verifyWarning } : {}),
           status,
         },
         null,
@@ -654,6 +706,75 @@ export async function executeSupervisorTool(
         { mode, maxMatches: limit, contextLines: 1 }
       );
       return JSON.stringify({ ok: true, result }, null, 2);
+    }
+
+    case "get_verify": {
+      const cfg = await loadConfig(ctx.worktree);
+      return JSON.stringify(
+        {
+          ok: true,
+          verify: cfg.verify ?? null,
+          verifyTimeoutMinutes: cfg.verifyTimeoutMinutes,
+          note: cfg.verify
+            ? "verify.command is the loop's only stop condition (exit 0 = pass)."
+            : "No verify.command set — the loop would have no automatic stop condition.",
+        },
+        null,
+        2
+      );
+    }
+
+    case "set_verify": {
+      const command = Array.isArray(args.command)
+        ? args.command.filter((p): p is string => typeof p === "string" && p.trim().length > 0)
+        : [];
+      if (command.length === 0) {
+        return JSON.stringify({ ok: false, error: "command must be a non-empty string array" }, null, 2);
+      }
+      const cwd = typeof args.cwd === "string" && args.cwd.trim() ? args.cwd.trim() : ".";
+      const timeoutMinutes =
+        typeof args.timeoutMinutes === "number" ? Math.trunc(args.timeoutMinutes) : undefined;
+      const { path: file } = await updateRawConfig(ctx.worktree, (raw) => ({
+        ...raw,
+        verify: { command, cwd },
+        ...(timeoutMinutes !== undefined ? { verifyTimeoutMinutes: timeoutMinutes } : {}),
+      }));
+      return JSON.stringify(
+        {
+          ok: true,
+          updated: file,
+          verify: { command, cwd },
+          hint: "Validate with run_verify — it should FAIL before the work is done.",
+        },
+        null,
+        2
+      );
+    }
+
+    case "run_verify": {
+      const cfg = await loadConfig(ctx.worktree);
+      if (!cfg.verify || cfg.verify.command.length === 0) {
+        return JSON.stringify(
+          { ok: false, error: "No verify.command set. Use set_verify first." },
+          null,
+          2
+        );
+      }
+      const result = await runAndParseVerify(ctx.worktree, cfg);
+      return JSON.stringify(
+        {
+          ok: true,
+          verdict: result.verdict,
+          command: cfg.verify.command,
+          output: clampLines(result.details ?? "", 120),
+          interpretation:
+            result.verdict === "pass"
+              ? "Passes NOW. If the work isn't done yet, this command is too weak — a loop would 'succeed' immediately."
+              : "Fails NOW — good: a future pass will mean the goal was met.",
+        },
+        null,
+        2
+      );
     }
 
     case "write_plan": {

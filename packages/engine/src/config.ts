@@ -1,5 +1,5 @@
 import path from "node:path";
-import { ConfigError, fileExists, readTextFile } from "./fs.js";
+import { ConfigError, fileExists, readTextFile, writeTextFile } from "./fs.js";
 import {
   resolvePlansConfig,
   type PlansConfigInput,
@@ -316,6 +316,35 @@ async function findConfigPath(worktree: string): Promise<string | undefined> {
     if (await fileExists(candidate)) return candidate;
   }
   return undefined;
+}
+
+/** Read the raw (unresolved) ralph.json config, or `{}` if none/invalid. */
+export async function readRawConfig(worktree: string): Promise<RalphConfigInput> {
+  const cfgPath = await findConfigPath(worktree);
+  if (!cfgPath) return {};
+  try {
+    const parsed = JSON.parse(await readTextFile(cfgPath)) as unknown;
+    return typeof parsed === "object" && parsed !== null ? (parsed as RalphConfigInput) : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Read-modify-write `ralph.json` (merge-safe). Writes to the existing config
+ * file (`.ralph-rlm/ralph.json` preferred, then `.opencode/ralph.json`), or
+ * creates `.opencode/ralph.json` when none exists. Returns the worktree-relative
+ * path written.
+ */
+export async function updateRawConfig(
+  worktree: string,
+  mutate: (raw: RalphConfigInput) => RalphConfigInput
+): Promise<{ path: string; config: RalphConfigInput }> {
+  const existing = await findConfigPath(worktree);
+  const target = existing ?? path.join(worktree, ".opencode", "ralph.json");
+  const next = mutate(await readRawConfig(worktree));
+  await writeTextFile(target, `${JSON.stringify(next, null, 2)}\n`);
+  return { path: path.relative(worktree, target).split(path.sep).join("/"), config: next };
 }
 
 export async function loadConfig(worktree: string): Promise<ResolvedConfig> {

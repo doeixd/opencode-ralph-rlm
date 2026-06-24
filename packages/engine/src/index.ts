@@ -1,6 +1,8 @@
 export {
   CONFIG_DEFAULTS,
   loadConfig,
+  readRawConfig,
+  updateRawConfig,
   resolveConfig,
   isSwarmUnsafeEvalEnabled,
   type RalphConfigInput,

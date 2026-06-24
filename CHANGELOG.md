@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.3.8] - 2026-06-24
+
+### Added
+
+- **The supervisor now develops the `verify.command` with you** — it's the loop's only stop condition, so this matters. New tools `get_verify` / `set_verify` / `run_verify` let the supervisor read, write (`ralph.json`, merge-safe), and dry-run the command out-of-loop to validate it (a good command **fails** before the work is done). Crafting it is now part of the planning phase (supervisor + `interview-and-create-plan` skill), and `start_loop` warns when `verify.command` is missing.
+
+### Changed
+
+- Supervisor system prompt gained a **"Verification is the contract"** section and a richer **Swarms** section (when/why to use them, that they never run verify or end the loop, and how to collect/merge results).
+
 ## [0.3.7] - 2026-06-24
 
 ### Changed

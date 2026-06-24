@@ -62,13 +62,23 @@ opencode-ralph-rlm plan-path
 
 Write your `PLAN.md` to that path. Keep the headings the loop expects — at minimum `## Goal`, `## Definition of Done`, and `## Milestones` — and add `## Open Questions`, `## Invariants`, `## Decisions`, and `## Notes` as needed.
 
-### 4. Review
+### 4. Verify command (the loop's stop condition)
+
+`verify.command` in `ralph.json` is the **single** thing that tells the loop it's done — it runs after every attempt and exit 0 = success. The plan is only as good as this command, so develop it deliberately *with the user*:
+
+- It must actually test the goal — not just `exit 0`, a no-op, or a build that passes regardless of the feature. Tie it to the Definition of Done.
+- It must be **deterministic** and reasonably fast (it runs every attempt).
+- Crucially, it should **fail right now**, before the work is done — run it and confirm a red baseline. A command that already passes means the loop would "succeed" immediately and do nothing.
+
+Set it in `ralph.json` (e.g. `"verify": { "command": ["npm","test"], "cwd": "." }` — use `["bash","-c","…"]` to chain steps), then run it once to confirm it fails for the right reason. Sharpen until it genuinely captures "done."
+
+### 5. Review
 
 Review the plan with the user: details, specifics, order, success criteria.
 
 Loop until they are satisfied. Treat disagreement as a signal the interview wasn't finished — go back and sharpen.
 
-### 5. Write final plan
+### 6. Write final plan
 
 Write the final, agreed `PLAN.md` (to the `opencode-ralph-rlm plan-path` location).
 

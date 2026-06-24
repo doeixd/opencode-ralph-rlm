@@ -140,7 +140,7 @@ The rest of this README is reference material — tools, config, the management 
 
 A loop is only as good as its `PLAN.md` — every worker treats it as authority over chat history. The **`interview-and-create-plan`** skill turns a vague goal into an authored plan *before* attempt 1, two ways:
 
-- **Path A — supervisor runs it.** When you delegate a goal and no authored plan exists, the supervisor enters a planning phase: it explores the repo (`repo_search` / `repo_grep`), interviews you to sharpen the goal and stress-test the design, writes `PLAN.md` via `write_plan`, and only calls `start_loop` after you approve.
+- **Path A — supervisor runs it.** When you delegate a goal and no authored plan exists, the supervisor enters a planning phase: it explores the repo (`repo_search` / `repo_grep`), interviews you to sharpen the goal and stress-test the design, writes `PLAN.md` via `write_plan`, **agrees a strong `verify.command` with you** (`set_verify` + `run_verify` to confirm it fails before the work is done), and only calls `start_loop` after you approve.
 - **Path B — run the skill yourself.** Run the `interview-and-create-plan` skill in a normal session (full tools, your chosen model). It writes `PLAN.md` to the path `opencode-ralph-rlm plan-path` reports (the active plan dir, not necessarily the repo root). Then switch to `ralph-rlm/supervisor` and say "go" — `start_loop` detects the authored plan and launches against it without re-bootstrapping.
 
 Both paths share one source of truth: the skill at `skills/interview-and-create-plan/SKILL.md` (a repo-local copy overrides the baked-in default). `start_loop` never overwrites an authored plan, and when it does bootstrap a fresh one it weaves your goal in instead of leaving a placeholder.
@@ -241,6 +241,7 @@ The provider supervisor LLM calls these internally — you steer in natural lang
 | `peek_worker` | Tail of `CURRENT_STATE.md` |
 | `read_protocol` | Read allowlisted protocol file |
 | `update_plan` / `update_rlm_instructions` | Unified diff patches + changelog |
+| `get_verify` / `set_verify` / `run_verify` | Read / write / dry-run `verify.command` — craft & validate the loop's stop condition with the user |
 | `last_verify_output` | Raw verify stdout/stderr |
 | `list_worker_questions` / `answer_worker` | Worker `ralph_ask` queue |
 | `spawn_swarm` | Parallel side agents (declarative tasks) |
