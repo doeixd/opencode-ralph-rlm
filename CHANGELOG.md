@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.3.5] - 2026-06-24
+
+### Changed
+
+- Setup skill + troubleshooting now cover the `serve` pre-flight check: stop a stale/already-running provider before starting a new version, and recognize that an "already running" message explains wrong-version / missing-feature symptoms.
+
 ## [0.3.4] - 2026-06-24
 
 ### Added

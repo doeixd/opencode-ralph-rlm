@@ -1,7 +1,7 @@
 {
   "name": "@doeixd/opencode-ralph-rlm-worker-plugin",
   "private": true,
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "Thin Ralph RLM worker plugin — file-first tools and context gating",
   "license": "MIT",
   "repository": {
