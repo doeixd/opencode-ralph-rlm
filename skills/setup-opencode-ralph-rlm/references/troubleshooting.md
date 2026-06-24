@@ -18,6 +18,17 @@ npx @doeixd/opencode-ralph-rlm serve --port 8788 --worktree .
 npx @doeixd/opencode-ralph-rlm doctor --port 8788 --worktree .
 ```
 
+## `serve` says a provider is already running / behaves like an old version
+
+A long-running provider does **not** pick up new code after an update. `serve` pre-flight-checks the port and refuses to start a duplicate, printing the running version vs. the one you're starting:
+
+```
+[ralph] A Ralph provider is already running on port 8787 (version 0.3.0).
+[ralph] You are starting version 0.3.4 ... stop the old one first, then re-run serve.
+```
+
+Fix: stop the old provider process (or free the port), then re-run `serve`. Confirm the live version with `curl http://127.0.0.1:8787/api/health` (the `version` field). If features added in a newer release (e.g. supervisor credential auto-detect) seem missing, you're almost certainly talking to a stale provider — restart it.
+
 ## OpenCode cannot find `ralph-rlm/supervisor`
 
 Check `opencode.json` and confirm `provider["ralph-rlm"]` exists. Re-run:
