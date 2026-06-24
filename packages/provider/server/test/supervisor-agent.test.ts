@@ -2,7 +2,7 @@ import path from "node:path";
 import { mkdtemp, cp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
-import { supervisorTurn } from "../lib/supervisor-agent.js";
+import { supervisorTurn, supervisorTurnStreaming } from "../lib/supervisor-agent.js";
 import { loopRegistry } from "../lib/loop-registry.js";
 import { getOpencodeRuntime } from "../lib/runtime.js";
 import { createProviderMockRuntime, mockSubscribe } from "./mock-runtime.js";
@@ -58,6 +58,22 @@ describe("supervisorTurn (RALPH_TEST_MODE)", () => {
     const engine = loopRegistry.get("sess-1");
     expect(engine?.state.started).toBe(true);
     expect(engine?.state.attempt).toBe(1);
+  });
+
+  test("supervisorTurnStreaming returns the same result and starts the loop", async () => {
+    const progress: string[] = [];
+    const turn = await supervisorTurnStreaming(
+      {
+        sessionKey: "sess-1",
+        worktree,
+        messages: [{ role: "user", content: "Implement marker file; tests must pass" }],
+      },
+      (text) => progress.push(text)
+    );
+
+    expect(turn.mode).toBe("test");
+    expect(turn.content.toLowerCase()).toContain("attempt 1");
+    expect(loopRegistry.get("sess-1")?.state.started).toBe(true);
   });
 
   test("returns status on status request", async () => {

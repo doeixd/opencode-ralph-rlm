@@ -165,7 +165,8 @@ async function runTestModeTurn(
 
 async function runLlmTurn(
   input: SupervisorTurnInput,
-  ctx: SupervisorToolContext
+  ctx: SupervisorToolContext,
+  onProgress?: (text: string) => void
 ): Promise<SupervisorTurnResult> {
   const config = await loadSupervisorLlmConfig(ctx.worktree);
 
@@ -205,23 +206,31 @@ async function runLlmTurn(
       })),
     });
 
+    // Surface progress to the streaming client as each round's tools run — this
+    // is the slow part of a turn, so live markers beat a silent wait.
     for (const call of result.toolCalls) {
-      const output = await executeSupervisorTool(
-        call.name,
-        parseToolArgs(call.arguments),
-        ctx
-      );
+      onProgress?.(`_→ ${call.name}_\n`);
+    }
+
+    // Tool calls within a round are independent — run them concurrently, then
+    // append results in the model's original order.
+    const outputs = await Promise.all(
+      result.toolCalls.map((call) =>
+        executeSupervisorTool(call.name, parseToolArgs(call.arguments), ctx)
+      )
+    );
+    result.toolCalls.forEach((call, i) => {
       conversation.push({
         role: "tool",
         tool_call_id: call.id,
-        content: output,
+        content: outputs[i] ?? "",
       });
-    }
+    });
   }
 
   const status = await executeSupervisorTool("loop_status", {}, ctx);
   return {
-    content: `Reached tool round limit. Current status:\n${status}`,
+    content: `I've taken several steps but haven't fully wrapped up this turn. Current status:\n${status}\n\nAsk me to continue if you'd like me to keep going.`,
     toolRounds,
     mode: "llm",
   };
@@ -259,5 +268,25 @@ export async function supervisorTurn(
 
   return withSessionTurnLock(input.sessionKey, () =>
     isTestMode() ? runTestModeTurn(input, ctx) : runLlmTurn(input, ctx)
+  );
+}
+
+/**
+ * Streaming variant: runs the same serialized turn but calls `onProgress` with
+ * live markers as tool rounds execute, and returns the final result (whose
+ * `content` the caller streams to the client). Test mode has no tool rounds, so
+ * it emits no progress — just the scripted result.
+ */
+export async function supervisorTurnStreaming(
+  input: SupervisorTurnInput,
+  onProgress: (text: string) => void
+): Promise<SupervisorTurnResult> {
+  const ctx: SupervisorToolContext = {
+    sessionKey: input.sessionKey,
+    worktree: input.worktree,
+  };
+
+  return withSessionTurnLock(input.sessionKey, () =>
+    isTestMode() ? runTestModeTurn(input, ctx) : runLlmTurn(input, ctx, onProgress)
   );
 }

@@ -87,55 +87,6 @@ export function encodeSseChunk(payload: Record<string, unknown>): string {
   return `data: ${JSON.stringify(payload)}\n\n`;
 }
 
-export function streamCompletionText(
-  request: OpenAIChatCompletionRequest,
-  text: string
-): ReadableStream<Uint8Array> {
-  const id = makeCompletionId();
-  const model = request.model ?? "ralph-rlm/supervisor";
-  const created = Math.floor(Date.now() / 1000);
-  const encoder = new TextEncoder();
-
-  return new ReadableStream({
-    start(controller) {
-      const words = text.split(/(\s+)/);
-      let index = 0;
-
-      const push = () => {
-        if (index >= words.length) {
-          controller.enqueue(
-            encoder.encode(
-              encodeSseChunk({
-                id,
-                object: "chat.completion.chunk",
-                created,
-                model,
-                choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
-              })
-            )
-          );
-          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-          controller.close();
-          return;
-        }
-
-        const piece = words[index] ?? "";
-        index += 1;
-        controller.enqueue(
-          encoder.encode(
-            encodeSseChunk({
-              id,
-              object: "chat.completion.chunk",
-              created,
-              model,
-              choices: [{ index: 0, delta: { content: piece }, finish_reason: null }],
-            })
-          )
-        );
-        push();
-      };
-
-      push();
-    },
-  });
-}
+// Streaming is now assembled in the chat-completions route (it interleaves live
+// tool-round progress with the final answer); the old post-hoc word-streamer was
+// removed in favor of that real progressive stream.

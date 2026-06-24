@@ -4,6 +4,20 @@ All notable changes to this project are documented here.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.0] - 2026-06-24
+
+### Added
+
+- **Streaming supervisor responses.** The chat-completions endpoint now streams progressively: as the turn runs its tool rounds (the slow part), live markers (`→ start_loop`, `→ loop_status`, …) appear, then the final answer streams — instead of hanging silently until the whole turn finishes and dumping it at once. Verified live: SSE `chat.completion.chunk`s arrive incrementally.
+
+### Changed
+
+- Supervisor **tool calls within a round run concurrently** now (was sequential), and the default **`maxToolRounds` is raised 8 → 12**. Hitting the round limit no longer reads as an error — it's a calm "I've taken several steps … ask me to continue" status. (Surfaced by the end-to-end smoke loop, where the prior limit/error was easy to hit.)
+
+### Notes
+
+- The end-to-end smoke loop validated the full stack live (auto-start, credential auto-detect, orchestration, the `ralph-worker` agent, and a real worker creating a file until `verify` passed). It also surfaced a footgun to address next: when no worker model is set, the worker can fall back to the `ralph-rlm/supervisor` model — set `worker.providerID`/`worker.modelID` in `ralph-provider.json`.
+
 ## [0.3.10] - 2026-06-24
 
 ### Changed

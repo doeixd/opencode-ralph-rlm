@@ -66,7 +66,7 @@ export async function loadSupervisorLlmConfig(
   const maxToolRounds = toBoundedInt(
     fileConfig.supervisor?.maxToolRounds ??
       Number(process.env.RALPH_SUPERVISOR_MAX_TOOL_ROUNDS),
-    8,
+    12,
     1,
     24
   );
