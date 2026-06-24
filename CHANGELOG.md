@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.3.7] - 2026-06-24
+
+### Changed
+
+- **`ralph_*` / `rlm_*` tools are now hidden from normal OpenCode sessions** (not just inert). The worker plugin's `config` hook denies them globally and re-allows them only in a dedicated **`ralph-worker`** agent that workers run under (the new default `worker.agent`). Verified live: a normal session reports the tools as unavailable; a worker session can use them and still has full coding tools. The 0.3.6 session-scoped gate/prompt remain as defense-in-depth.
+- Do not set `worker.agent` (e.g. to `build`) — that agent has the Ralph tools denied; workers must use `ralph-worker`. The example/scaffold configs no longer set it.
+
 ## [0.3.6] - 2026-06-24
 
 ### Fixed

@@ -193,6 +193,7 @@ export {
 
 export {
   loadWorkerSpawnConfig,
+  RALPH_WORKER_AGENT,
   type WorkerSpawnConfig,
 } from "./worker-spawn.js";
 

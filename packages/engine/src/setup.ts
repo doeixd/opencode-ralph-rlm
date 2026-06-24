@@ -317,7 +317,8 @@ export async function setupProject(options: SetupOptions): Promise<SetupResult> 
             maxToolRounds: 8,
           },
           worker: {
-            agent: "build",
+            providerID: "opencode",
+            modelID: "deepseek-v4-flash-free",
           },
         }),
         options,

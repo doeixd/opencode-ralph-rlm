@@ -2,6 +2,13 @@ import path from "node:path";
 import { fileExists, readTextFile } from "./fs.js";
 import type { EngineTemplates } from "./templates.js";
 
+/**
+ * OpenCode agent workers run under. A dedicated agent (defined by the worker
+ * plugin's `config` hook) lets us hide the `ralph_*` / `rlm_*` tools from normal
+ * sessions (denied globally) while re-allowing them here.
+ */
+export const RALPH_WORKER_AGENT = "ralph-worker";
+
 export type WorkerSpawnConfig = {
   agent: string;
   systemPrompt: string;
@@ -38,7 +45,7 @@ export async function loadWorkerSpawnConfig(
     templates.workerSystemPrompt;
 
   const config: WorkerSpawnConfig = {
-    agent: fromEnv.agent || worker.agent?.trim() || "build",
+    agent: fromEnv.agent || worker.agent?.trim() || RALPH_WORKER_AGENT,
     systemPrompt,
   };
 

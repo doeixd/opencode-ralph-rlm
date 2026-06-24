@@ -162,7 +162,7 @@ Model: Attempt 2. Last verify failed. Worker idle. …
 - **Exit criterion:** `verify.command` in `.opencode/ralph.json` (single source of truth for “done”).
 - **Memory:** protocol files in the active plan dir (`.ralph-rlm/plans/<name>/`, or repo root in legacy mode) — not chat history.
 - **Workers:** fresh OpenCode session per attempt; engine spawns via SDK.
-- **Worker plugin:** gates `edit`/`bash` until `ralph_load_context()`; provides FFF-accelerated `rlm_grep`, `rlm_file_search`, `rlm_glob`, and `rlm_slice`.
+- **Worker plugin:** gates `edit`/`bash` until `ralph_load_context()`; provides FFF-accelerated `rlm_grep`, `rlm_file_search`, `rlm_glob`, and `rlm_slice`. Its `ralph_*` / `rlm_*` tools are **hidden from your normal OpenCode sessions** — they're denied globally and re-enabled only in the dedicated `ralph-worker` agent that workers run under.
 - **Permissions:** bash/edit prompts appear in the **worker session** TUI (answer there).
 
 

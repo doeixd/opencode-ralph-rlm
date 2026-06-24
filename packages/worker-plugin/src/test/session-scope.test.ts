@@ -69,6 +69,36 @@ describe("plugin scoping: normal vs worker sessions", () => {
     }
   });
 
+  test("config hook hides ralph tools globally + defines the worker agent", async () => {
+    const { hooks, worktree } = await loadHooks("x");
+    try {
+      const cfg: Record<string, any> = {};
+      await hooks.config(cfg);
+      expect(cfg.permission["ralph_*"]).toBe("deny");
+      expect(cfg.permission["rlm_*"]).toBe("deny");
+      expect(cfg.agent["ralph-worker"].permission["ralph_*"]).toBe("allow");
+      expect(cfg.agent["ralph-worker"].permission["rlm_*"]).toBe("allow");
+    } finally {
+      await rm(worktree, { recursive: true, force: true });
+    }
+  });
+
+  test("config hook is merge-safe (keeps the user's own rules)", async () => {
+    const { hooks, worktree } = await loadHooks("x");
+    try {
+      const cfg: Record<string, any> = {
+        permission: { "ralph_*": "allow" },
+        agent: { "ralph-worker": { description: "mine" } },
+      };
+      await hooks.config(cfg);
+      expect(cfg.permission["ralph_*"]).toBe("allow"); // not clobbered
+      expect(cfg.permission["rlm_*"]).toBe("deny"); // still added
+      expect(cfg.agent["ralph-worker"].description).toBe("mine"); // not clobbered
+    } finally {
+      await rm(worktree, { recursive: true, force: true });
+    }
+  });
+
   test("compaction context only added in worker sessions", async () => {
     const worker = await loadHooks("rlm-worker-attempt-1");
     const normal = await loadHooks("chat");

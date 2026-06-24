@@ -14,6 +14,7 @@ import {
   loadConfig,
   nowISO,
   protocolFilePath,
+  RALPH_WORKER_AGENT,
   readLoopAttemptMarker,
   readPendingInput,
   readTextFile,
@@ -582,6 +583,27 @@ export const RalphWorkerPlugin: Plugin = async ({ client, worktree }) => {
   });
 
   return {
+    // Hide Ralph's tools from normal OpenCode sessions: deny `ralph_*` / `rlm_*`
+    // globally, and re-allow them only in the dedicated worker agent (which the
+    // engine spawns workers under). Merge-safe: never clobber the user's own
+    // permission rules or an existing agent of the same name.
+    config: async (config: {
+      permission?: Record<string, unknown>;
+      agent?: Record<string, unknown>;
+    }) => {
+      const perm = (config.permission ??= {});
+      for (const pattern of ["ralph_*", "rlm_*"]) {
+        if (perm[pattern] === undefined) perm[pattern] = "deny";
+      }
+      const agents = (config.agent ??= {});
+      if (agents[RALPH_WORKER_AGENT] === undefined) {
+        agents[RALPH_WORKER_AGENT] = {
+          description: "Ralph RLM worker — loop implementer (auto-managed).",
+          permission: { "ralph_*": "allow", "rlm_*": "allow" },
+        };
+      }
+    },
+
     tool: {
       ralph_load_context: tool_ralph_load_context,
       rlm_grep: tool_rlm_grep,

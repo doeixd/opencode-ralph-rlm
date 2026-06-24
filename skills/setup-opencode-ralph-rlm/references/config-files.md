@@ -100,13 +100,13 @@ Purpose: pin a specific supervisor and/or worker model. **Usually not needed** �
     "maxToolRounds": 8
   },
   "worker": {
-    "agent": "build",
     "providerID": "opencode",
     "modelID": "deepseek-v4-flash-free"
   }
 }
 ```
 
+- **Do not set `worker.agent`.** Workers run under the dedicated `ralph-worker` agent (auto-defined by the plugin) so the `ralph_*` / `rlm_*` tools can be hidden from normal sessions while staying available to workers. Forcing `worker.agent: "build"` would put workers on an agent where those tools are denied — breaking the loop.
 - **Supervisor credentials auto-detect.** If no key is set via `RALPH_SUPERVISOR_API_KEY` or this file, the provider falls back to OpenCode's own auth (`~/.local/share/opencode/auth.json`) — a keyed provider you've authenticated (e.g. Google, OpenCode Zen). So if the user has authenticated a provider in OpenCode, **no supervisor config is needed**. Only set `supervisor.modelID` / `baseUrl` (key via `RALPH_SUPERVISOR_API_KEY` env — keep secrets out of this file) to force a specific provider/model.
 - **`worker.providerID` + `worker.modelID`** — what spawned OpenCode worker sessions code with (both required). If omitted, workers use OpenCode's configured default model. To run coding on a free model, set a free OpenCode model such as `opencode` / `deepseek-v4-flash-free` (recommend this, don't force it).
 
