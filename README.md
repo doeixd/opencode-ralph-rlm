@@ -1,7 +1,5 @@
 # ralph-rlm
 
-[![skills.sh](https://skills.sh/b/doeixd/opencode-ralph-rlm)](https://skills.sh/doeixd/opencode-ralph-rlm)
-
 An [OpenCode](https://opencode.ai) integration for **long-running, hands-off coding work**. Describe a goal, walk away, and come back to finished work. Behind the scenes a fresh agent keeps working in a loop — checking itself against *your* tests after every attempt — until the job is actually done.
 
 It combines two ideas:
