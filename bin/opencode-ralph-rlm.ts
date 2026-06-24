@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 import {
@@ -68,8 +68,64 @@ function numericPort(raw: string | undefined): number {
   return value;
 }
 
+function thisVersion(): string {
+  try {
+    return JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version ?? "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+/**
+ * Probe a port for an already-running Ralph provider (so we don't start a stale
+ * duplicate). Tries `localhost` and `127.0.0.1` — Node's fetch can time out on
+ * one of them depending on platform/IPv6, so we try both.
+ */
+async function probeProvider(
+  port: number
+): Promise<{ running: false } | { running: true; isRalph: boolean; version?: string }> {
+  for (const host of ["localhost", "127.0.0.1"]) {
+    try {
+      const res = await fetch(`http://${host}:${port}/api/health`, {
+        signal: AbortSignal.timeout(1200),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        provider?: string;
+        version?: string;
+      };
+      const isRalph = data?.provider === "@doeixd/opencode-ralph-rlm";
+      return { running: true, isRalph, ...(data?.version ? { version: data.version } : {}) };
+    } catch {
+      // try the next host
+    }
+  }
+  return { running: false };
+}
+
 async function runServe(args: string[]): Promise<void> {
   const port = numericPort(readFlagValue(args, ["--port", "-p"]));
+
+  // Pre-flight: if something is already serving this port, don't start a duplicate.
+  const existing = await probeProvider(port);
+  if (existing.running) {
+    const mine = thisVersion();
+    if (existing.isRalph) {
+      const running = existing.version ?? "unknown";
+      console.error(`[ralph] A Ralph provider is already running on port ${port} (version ${running}).`);
+      if (existing.version && existing.version !== mine) {
+        console.error(
+          `[ralph] You are starting version ${mine}. A running provider does NOT pick up new code —`
+        );
+        console.error(`[ralph] stop the old one first (close its process or free port ${port}), then re-run serve.`);
+      } else {
+        console.error(`[ralph] It is already serving (same version). Reuse it, or stop it to restart.`);
+      }
+    } else {
+      console.error(`[ralph] Port ${port} is in use by another service (not a Ralph provider). Use --port to pick another.`);
+    }
+    process.exitCode = 1;
+    return;
+  }
   const opencodeUrl =
     readFlagValue(args, ["--opencode-url", "--opencode"]) ??
     process.env.OPENCODE_BASE_URL ??

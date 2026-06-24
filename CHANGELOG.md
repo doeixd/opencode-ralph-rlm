@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.3.4] - 2026-06-24
+
+### Added
+
+- **`serve` pre-flight check** — before starting, the CLI probes the target port and, if a Ralph provider is already running, reports its version vs. the one being started and tells you to stop the old one (a running provider does not pick up new code). Also detects when the port is held by a non-Ralph service. (Probes both `localhost` and `127.0.0.1` to dodge a Node fetch/IPv6 timeout quirk.)
+
 ## [0.3.3] - 2026-06-24
 
 ### Changed
