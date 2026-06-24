@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/ralph-rlm-overview.png" alt="Ralph-RLM: a coding loop you can hand off — outer loop (you + supervisor), inner loop (a fresh worker implements and runs verify until tests pass), optional parallel swarms, and why it works (memory in files, fresh worker each attempt, tests decide done, ask status anytime)." width="100%">
+</p>
+
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/doeixd/opencode-ralph-rlm)
 
 # ralph-rlm
