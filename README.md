@@ -95,7 +95,7 @@ Supervisor LLM credentials (provider process). **If you've already authenticated
 
 ```bash
 export RALPH_SUPERVISOR_API_KEY="..."
-export RALPH_SUPERVISOR_MODEL="gpt-4o-mini"   # + RALPH_SUPERVISOR_BASE_URL for non-OpenAI endpoints
+export RALPH_SUPERVISOR_MODEL="gpt-5.4-mini"   # + RALPH_SUPERVISOR_BASE_URL for non-OpenAI endpoints
 ```
 
 Or `.opencode/ralph-provider.json` — see [`.opencode/ralph-provider.example.json`](.opencode/ralph-provider.example.json). Check what resolved with `curl http://127.0.0.1:8787/api/health` (`supervisor.ready` / `model` / `source`).

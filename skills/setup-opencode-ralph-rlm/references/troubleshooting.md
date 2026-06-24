@@ -95,7 +95,7 @@ Set provider-process environment variables:
 
 ```bash
 export RALPH_SUPERVISOR_API_KEY="..."
-export RALPH_SUPERVISOR_MODEL="gpt-4o-mini"
+export RALPH_SUPERVISOR_MODEL="gpt-5.4-mini"
 ```
 
 For smoke tests without an external LLM:

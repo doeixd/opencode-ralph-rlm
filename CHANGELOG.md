@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.3.2] - 2026-06-24
+
+### Fixed
+
+- **Confirmed supervisor auto-detect endpoints + model ids** against the live OpenCode provider registry (`/config/providers`): OpenCode Zen (`opencode` / `opencode-go`) → `https://opencode.ai/zen/v1` with the free `deepseek-v4-flash-free` model; Google → `gemini-2.5-flash`. Prefer the free Zen model first.
+- Updated the stale OpenAI default model (`gpt-4o-mini` → `gpt-5.4-mini`) in the supervisor default and all docs/examples.
+
 ## [0.3.1] - 2026-06-24
 
 ### Added

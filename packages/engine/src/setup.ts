@@ -313,7 +313,7 @@ export async function setupProject(options: SetupOptions): Promise<SetupResult> 
         jsonBlock({
           supervisor: {
             baseUrl: "https://api.openai.com/v1",
-            modelID: "gpt-4o-mini",
+            modelID: "gpt-5.4-mini",
             maxToolRounds: 8,
           },
           worker: {

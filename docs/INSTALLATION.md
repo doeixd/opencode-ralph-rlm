@@ -165,5 +165,5 @@ Use this path when you need to review or vendor every file.
 
   ```bash
   export RALPH_SUPERVISOR_API_KEY="..."
-  export RALPH_SUPERVISOR_MODEL="gpt-4o-mini"
+  export RALPH_SUPERVISOR_MODEL="gpt-5.4-mini"
   ```

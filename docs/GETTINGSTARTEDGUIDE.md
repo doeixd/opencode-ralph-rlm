@@ -249,7 +249,7 @@ The provider calls an LLM for supervisor chat turns (separate from your worker m
 
 ```bash
 export RALPH_SUPERVISOR_API_KEY="sk-..."
-export RALPH_SUPERVISOR_MODEL="gpt-4o-mini"
+export RALPH_SUPERVISOR_MODEL="gpt-5.4-mini"
 # export RALPH_SUPERVISOR_BASE_URL="https://api.openai.com/v1"   # for non-OpenAI endpoints
 ```
 

@@ -20,21 +20,28 @@ export type DetectedSupervisorCreds = {
   source: string;
 };
 
-/** Known OpenAI-compatible endpoints + a sensible default model per provider. */
+/**
+ * Known OpenAI-compatible endpoints + a sensible (tool-calling capable) default
+ * model per provider. Endpoints and model ids confirmed against the live
+ * OpenCode provider registry (`/config/providers`) and provider docs:
+ * - OpenCode Zen gateway uses OPENCODE_API_KEY; free models (`*-free`) are $0.
+ * - Google Gemini exposes an OpenAI-compatible endpoint; key = GEMINI_API_KEY.
+ */
 const PROVIDER_ENDPOINTS: Record<string, { baseUrl: string; model: string }> = {
-  // OpenCode Zen gateway (the user's keyed Zen access).
-  "opencode-go": { baseUrl: "https://opencode.ai/zen/v1", model: "deepseek-v4-flash" },
+  // OpenCode Zen — free model (same gateway/key as opencode-go).
+  opencode: { baseUrl: "https://opencode.ai/zen/v1", model: "deepseek-v4-flash-free" },
+  "opencode-go": { baseUrl: "https://opencode.ai/zen/v1", model: "deepseek-v4-flash-free" },
   // Google Gemini OpenAI-compatible endpoint.
   google: {
     baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
     model: "gemini-2.5-flash",
   },
   // OpenAI (only used if stored as a static api key, not OAuth).
-  openai: { baseUrl: "https://api.openai.com/v1", model: "gpt-4o-mini" },
+  openai: { baseUrl: "https://api.openai.com/v1", model: "gpt-5.4-mini" },
 };
 
-/** Order to prefer when several keyed providers are available. */
-const PROVIDER_PRIORITY = ["opencode-go", "google", "openai"];
+/** Order to prefer when several keyed providers are available (free Zen first). */
+const PROVIDER_PRIORITY = ["opencode", "opencode-go", "google", "openai"];
 
 function authFilePath(): string {
   const override = process.env.RALPH_OPENCODE_AUTH_PATH?.trim();

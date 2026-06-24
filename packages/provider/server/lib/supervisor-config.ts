@@ -22,7 +22,7 @@ export type ProviderConfigFile = {
 };
 
 const DEFAULT_BASE_URL = "https://api.openai.com/v1";
-const DEFAULT_MODEL = "gpt-4o-mini";
+const DEFAULT_MODEL = "gpt-5.4-mini";
 
 export function isTestMode(): boolean {
   const raw = process.env.RALPH_TEST_MODE?.trim().toLowerCase();
