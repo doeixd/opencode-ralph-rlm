@@ -28,6 +28,7 @@ Make sure you understand what is going on and what the user actually wants.
 - **Discuss concrete scenarios.** When domain relationships come up, stress-test them with specific scenarios. Invent edge cases that force the user to be precise about the boundaries between concepts.
 - **Cross-reference with code.** When the user states how something works, check whether the code agrees. If you find a contradiction, surface it: "Your code cancels entire Orders, but you just said partial cancellation is possible — which is right?"
 - **Discuss the domain itself** — the fundamental meanings of words; the types / primitives relevant to the plan; their interactions, invariants, and implications.
+- **Surface and state assumptions.** Make implicit assumptions explicit and say them back to the user for confirmation — about the domain, how the existing code behaves, data shapes, external systems, and what "done" means. An unstated assumption is a silent risk; when the user nods past something, name the assumption you're both making and ask if it holds. Note which ones you're confident about versus guessing.
 - **Ask about success criteria.** What does success look like? What is the ultimate goal? How will we know it's done? (This becomes the Definition of Done — and should align with the loop's `verify.command`.)
 
 ### 2. Sketch
@@ -60,7 +61,9 @@ Write the plan to the path the loop reads `PLAN.md` from. **Do not assume the re
 opencode-ralph-rlm plan-path
 ```
 
-Write your `PLAN.md` to that path. Keep the headings the loop expects — at minimum `## Goal`, `## Definition of Done`, and `## Milestones` — and add `## Open Questions`, `## Invariants`, `## Decisions`, and `## Notes` as needed.
+Write your `PLAN.md` to that path. Keep the headings the loop expects — at minimum `## Goal`, `## Definition of Done`, and `## Milestones` — and add `## Assumptions`, `## Open Questions`, `## Invariants`, `## Decisions`, and `## Notes` as needed.
+
+State the **assumptions** the plan rests on explicitly in `## Assumptions` — both confirmed and unconfirmed, so a fresh worker (which has no chat history) inherits them. For any assumption that is **load-bearing and not yet verified** (e.g. "the API returns X", "this function has no side effects", "the table is already indexed"), add an early milestone to **test/validate it first** — a cheap probe beats discovering a wrong assumption after several attempts. An unconfirmed assumption that everything depends on is the single biggest risk to the loop.
 
 ### 4. Verify command (the loop's stop condition)
 
