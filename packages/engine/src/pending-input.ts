@@ -1,8 +1,10 @@
-import path from "node:path";
 import { fileExists, readTextFile, writeTextFile } from "./fs.js";
+import { stateFilePath, type PlanContext } from "./plan-paths.js";
 import { nowISO } from "./text.js";
 
-/** Relative path (under worktree) for worker↔supervisor pending Q&A. */
+/** Marker filename, resolved under the plan's state dir. */
+export const PENDING_INPUT_FILE = "pending_input.json";
+/** Legacy relative path (under worktree) — retained for reference. */
 export const PENDING_INPUT_REL_PATH = ".opencode/pending_input.json";
 
 export type PendingQuestion = {
@@ -25,8 +27,8 @@ export type PendingInputData = {
   answers?: PendingAnswer[];
 };
 
-export async function readPendingInput(worktree: string): Promise<PendingInputData> {
-  const filePath = path.join(worktree, PENDING_INPUT_REL_PATH);
+export async function readPendingInput(ctx: PlanContext): Promise<PendingInputData> {
+  const filePath = stateFilePath(ctx, PENDING_INPUT_FILE);
   if (!(await fileExists(filePath))) return {};
   try {
     return JSON.parse(await readTextFile(filePath)) as PendingInputData;
@@ -36,11 +38,11 @@ export async function readPendingInput(worktree: string): Promise<PendingInputDa
 }
 
 export async function writePendingInput(
-  worktree: string,
+  ctx: PlanContext,
   data: PendingInputData
 ): Promise<void> {
   await writeTextFile(
-    path.join(worktree, PENDING_INPUT_REL_PATH),
+    stateFilePath(ctx, PENDING_INPUT_FILE),
     JSON.stringify(data, null, 2)
   );
 }
@@ -52,11 +54,11 @@ export function listUnansweredQuestions(data: PendingInputData): PendingQuestion
 }
 
 export async function addPendingAnswer(
-  worktree: string,
+  ctx: PlanContext,
   questionId: string,
   answer: string
 ): Promise<PendingInputData> {
-  const data = await readPendingInput(worktree);
+  const data = await readPendingInput(ctx);
   const answers = [...(data.answers ?? [])];
   const existing = answers.findIndex((entry) => entry.id === questionId);
   const entry: PendingAnswer = { id: questionId, answer };
@@ -71,6 +73,6 @@ export async function addPendingAnswer(
     answers,
     updatedAt: nowISO(),
   };
-  await writePendingInput(worktree, updated);
+  await writePendingInput(ctx, updated);
   return updated;
 }

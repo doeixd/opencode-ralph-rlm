@@ -6,6 +6,7 @@ The v0.2 revision (provider model, loop engine, worker plugin, session bridge, s
 
 | Doc | Purpose |
 |-----|---------|
+| [`INSTALLATION.md`](INSTALLATION.md) | Setup paths: agent skill, CLI, manual |
 | [`README.md`](README.md) | Full reference (tools, config, API) |
 | [`MIGRATION.md`](MIGRATION.md) | Upgrading from v0.1 plugin |
 | [`REVISION_PLAN.md`](REVISION_PLAN.md) | Contributor architecture + v0.3 roadmap |
@@ -16,37 +17,60 @@ The v0.2 revision (provider model, loop engine, worker plugin, session bridge, s
 
 | Piece | Where | Purpose |
 |-------|-------|---------|
-| Ralph provider | `bun run ralph-serve` (:8787) | Supervisor LLM + `LoopEngine` |
+| Ralph provider | `opencode-ralph-rlm serve` (:8787) | Supervisor LLM + `LoopEngine` |
 | OpenCode server | `opencode` (:4096) | Runs worker sessions |
 | Worker plugin | `.opencode/plugins/ralph-worker.ts` | RLM tools + context gate |
 | Session bridge | `.opencode/plugins/ralph-session-bridge.ts` | Per-session `LoopRun` correlation |
 | Loop config | `.opencode/ralph.json` | `verify.command`, `maxAttempts`, swarm caps |
 | Provider config | `opencode.json` | Register `ralph-rlm/supervisor` model |
-| Protocol files | Repo root (`PLAN.md`, …) | Durable memory (bootstrapped on first loop) |
+| Protocol files | Active plan dir (`.ralph-rlm/plans/<name>/`) | Durable memory (bootstrapped on first plan/loop) |
 
 ---
 
-## Step 1 — Install dependencies
+## Step 1 — Initialize your project
 
-In this repo (or your fork):
+Recommended: install the setup skill and let your agent adapt the setup to the project:
 
 ```bash
-git clone https://github.com/doeixd/opencode-ralph-rlm
-cd opencode-ralph-rlm
-bun install
+npx skills add doeixd/opencode-ralph-rlm
 ```
 
-In **your target project**, copy both plugins:
+Then ask:
+
+```text
+Use the setup-opencode-ralph-rlm skill to install Ralph RLM in this project.
+```
+
+Direct CLI setup is also available.
+
+From your target project root:
+
+```bash
+npm install -D @doeixd/opencode-ralph-rlm
+npx @doeixd/opencode-ralph-rlm setup
+```
+
+This path uses Node/npm; Bun is only needed when developing this repository itself.
+
+This installs the local OpenCode wiring:
 
 ```text
 .opencode/plugins/
 ├── ralph-worker.ts           # re-exports @doeixd/opencode-ralph-rlm/worker-plugin
 └── ralph-session-bridge.ts   # injects session ID on provider HTTP requests
+.opencode/ralph.json          # verify.command, maxAttempts, swarm caps
+opencode.json                 # ralph-rlm/supervisor provider registration
 ```
 
-This repo ships thin wrappers. After `bun run build`, OpenCode loads them from `.opencode/plugins/` automatically.
+The setup command skips existing managed files by default. Use `--dry-run` to preview and `--force` only when you intentionally want to overwrite generated Ralph files.
 
 Optional: add `AGENT.md` at the repo root and set `agentMdPath` in `ralph.json` for static project rules injected via `ralph_load_context()`.
+
+Worker search uses optional native FFF acceleration when available. Disable it only if native search causes local issues:
+
+```bash
+RALPH_FFF_DISABLED=1 npx @doeixd/opencode-ralph-rlm serve --worktree .
+```
 
 ---
 
@@ -55,8 +79,7 @@ Optional: add `AGENT.md` at the repo root and set `agentMdPath` in `ralph.json` 
 From your project root:
 
 ```bash
-cd /path/to/your-project
-bun run /path/to/opencode-ralph-rlm/bin/ralph-serve.ts -- --doctor --autofix --worktree .
+npx @doeixd/opencode-ralph-rlm doctor --worktree .
 ```
 
 Doctor reports:
@@ -65,13 +88,13 @@ Doctor reports:
 - OpenCode / provider reachability
 - Optional autofix for `verify.command` (detects bun/npm/cargo)
 
-Fix any **ISSUE** lines before long runs.
+Fix any **ISSUE** lines before long runs. A provider reachability warning is normal until Step 5.
 
 ---
 
-## Step 3 — Configure the loop
+## Step 3 — Review the loop config
 
-Create or edit `.opencode/ralph.json`:
+Review `.opencode/ralph.json`:
 
 ```json
 {
@@ -86,6 +109,11 @@ Create or edit `.opencode/ralph.json`:
   "gateDestructiveToolsUntilContextLoaded": true,
   "maxRlmSliceLines": 200,
   "agentMdPath": "AGENT.md",
+  "plans": { "dir": ".ralph-rlm/plans", "active": "default" },
+  "fff": {
+    "enabled": true,
+    "scanTimeoutMs": 10000
+  },
   "subAgentEnabled": true,
   "swarm": {
     "enabled": true,
@@ -99,13 +127,15 @@ Create or edit `.opencode/ralph.json`:
 
 **Critical:** `verify.command` must reflect your real quality gate (tests, typecheck, lint). The loop only stops when verify passes or `maxAttempts` is exhausted.
 
-On first `start_loop`, the engine bootstraps protocol files (`PLAN.md`, `RLM_INSTRUCTIONS.md`, …) with sensible defaults. Edit those files to steer workers — they are more important than chat instructions.
+`plans` controls where protocol files live. With the default `plans.dir`, each plan is its own directory under `.ralph-rlm/plans/` (so you can keep multiple named plans/versions and switch between them). Run `opencode-ralph-rlm plan-path` to print the active plan's `PLAN.md` location, or set `plans.dir` to `""` for the legacy repo-root layout.
+
+Protocol files (`PLAN.md`, `RLM_INSTRUCTIONS.md`, …) are created when you plan or on first `start_loop`. Edit those files to steer workers — they are more important than chat instructions.
 
 ---
 
-## Step 4 — Register the provider in OpenCode
+## Step 4 — Review OpenCode provider registration
 
-Merge into your `opencode.json` (copy from [`.opencode/opencode.provider.example.json`](.opencode/opencode.provider.example.json)):
+The setup command merges this into `opencode.json` while preserving existing providers:
 
 ```json
 {
@@ -139,7 +169,7 @@ The bridge tracks `session.created` / `session.updated` events and injects `x-op
 1. Start provider with debug logging (optional):
 
    ```bash
-   RALPH_SESSION_DEBUG=1 bun run ralph-serve
+   RALPH_SESSION_DEBUG=1 npx @doeixd/opencode-ralph-rlm serve --worktree .
    ```
 
 2. Send a message in the TUI with model `ralph-rlm/supervisor`.
@@ -188,7 +218,9 @@ v0.2 does not require you to write supervisor or worker prompts from scratch. De
 
 ### What the supervisor is told to do
 
+- Plan first: when you delegate a goal and no authored plan exists, interview you and `write_plan` before `start_loop` (unless you say to skip).
 - Delegate goals → `start_loop`; status questions → `loop_status`; control → pause/resume/stop tools.
+- Manage named plans/versions → `list_plans` / `select_plan` / `new_plan`.
 - Never edit repo code or mention legacy v0.1 tools (`ralph_spawn_worker`, etc.).
 - Answer worker `ralph_ask` via `list_worker_questions` + `answer_worker`.
 - Update strategy in `PLAN.md` / `RLM_INSTRUCTIONS.md` so the next worker inherits context.
@@ -230,7 +262,7 @@ Worker sessions use `worker.agent` / `worker.modelID` from this file when the en
 Terminal 1:
 
 ```bash
-bun run ralph-serve
+npx @doeixd/opencode-ralph-rlm serve --worktree .
 ```
 
 Terminal 2 (your project):
@@ -247,14 +279,18 @@ In the TUI:
 Example:
 
 ```text
-Implement JWT middleware with tests passing. Bootstrap the plan if needed.
+Implement JWT middleware with tests passing.
 ```
 
-Expected response (paraphrased):
+By default the supervisor **plans before it builds** — it interviews you to sharpen the goal and definition of done, writes `PLAN.md`, and starts the loop only after you approve:
 
 ```text
-Started loop — attempt 1 running in background. Ask for status anytime.
+Let's plan first — refresh tokens too? which test command counts as "done"?
+> yes; npm test
+Plan locked. Attempt 1 running in the background — ask "status?" anytime.
 ```
+
+Say "just start" / "skip planning" to launch immediately, or author the plan up front with the `interview-and-create-plan` skill and then say "go" — the supervisor detects the authored plan and runs against it.
 
 ---
 
@@ -269,8 +305,13 @@ Started loop — attempt 1 running in background. Ask for status anytime.
 | `show me worker state` | `peek_worker` on `CURRENT_STATE.md` |
 | Answer a worker question | `list_worker_questions` → `answer_worker` |
 | Parallel side work | `spawn_swarm` with named tasks |
+| Keep separate plans/versions | `list_plans` / `select_plan` / `new_plan` |
+
+You can also notify the supervisor from a script or watcher (e.g. "CI went red") with `opencode-ralph-rlm send-message -s <id> -m "…"` — run `opencode-ralph-rlm sessions` to find the id.
 
 ### On disk
+
+Protocol files live in the active plan directory (`.ralph-rlm/plans/<name>/`; run `opencode-ralph-rlm plan-path` to locate it). Relative to that directory:
 
 | File | Contents |
 |------|----------|
@@ -340,10 +381,11 @@ You (TUI, ralph-rlm/supervisor)
 
 | Symptom | Fix |
 |---------|-----|
-| Provider unreachable | Run `bun run ralph-serve`; check port `8787` |
+| Provider unreachable | Run `npx @doeixd/opencode-ralph-rlm serve --worktree .`; check port `8787` |
 | OpenCode unhealthy in `/api/health` | Start `opencode` server |
-| Loop does not start | `bun run ralph-serve -- --doctor --worktree .` |
+| Loop does not start | `npx @doeixd/opencode-ralph-rlm doctor --worktree .` |
 | Missing API key error | Set `RALPH_SUPERVISOR_API_KEY` or use `RALPH_TEST_MODE=1` for smoke |
+| FFF unavailable | Non-fatal; `rlm_grep` falls back automatically. Reinstall optional deps or set `RALPH_FFF_DISABLED=1` |
 | Verify always fails | Fix `verify.command` to match your repo |
 | Worker blocked on edit | Worker must call `ralph_load_context()` first |
 | Two tabs share one loop | Load `ralph-session-bridge.ts`; confirm `x-ralph-session-source` ≠ `anonymous` |

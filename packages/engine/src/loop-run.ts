@@ -70,6 +70,8 @@ export type LoopRunConfig = {
   sessionId: string;
   worktree: string;
   bootstrap?: boolean;
+  /** User goal woven into PLAN.md when bootstrapping a fresh plan. */
+  goal?: string;
 };
 
 export function createLoopRunState(config: LoopRunConfig): LoopRunState {

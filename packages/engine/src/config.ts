@@ -1,5 +1,10 @@
 import path from "node:path";
 import { ConfigError, fileExists, readTextFile } from "./fs.js";
+import {
+  resolvePlansConfig,
+  type PlansConfigInput,
+  type ResolvedPlansConfig,
+} from "./plan-paths.js";
 
 export type StatusVerbosity = "minimal" | "normal" | "verbose";
 
@@ -31,6 +36,16 @@ export type ResolvedSwarmConfig = {
   maxUnsafeScriptSpawns: number;
 };
 
+export type FffConfigInput = {
+  enabled?: boolean;
+  scanTimeoutMs?: number;
+};
+
+export type ResolvedFffConfig = {
+  enabled: boolean;
+  scanTimeoutMs: number;
+};
+
 export type RalphConfigInput = {
   enabled?: boolean;
   autoStartOnMainIdle?: boolean;
@@ -55,6 +70,8 @@ export type RalphConfigInput = {
   reviewerOutputDir?: string;
   reviewerPostToConversation?: boolean;
   agentMdPath?: string;
+  plans?: PlansConfigInput;
+  fff?: FffConfigInput;
   swarm?: SwarmConfigInput;
 };
 
@@ -82,6 +99,8 @@ export type ResolvedConfig = {
   reviewerOutputDir: string;
   reviewerPostToConversation: boolean;
   agentMdPath: string;
+  plans: ResolvedPlansConfig;
+  fff: ResolvedFffConfig;
   swarm: ResolvedSwarmConfig;
 };
 
@@ -130,6 +149,11 @@ export const CONFIG_DEFAULTS: ResolvedConfig = {
   reviewerOutputDir: ".opencode/reviews",
   reviewerPostToConversation: true,
   agentMdPath: "AGENT.md",
+  plans: resolvePlansConfig(undefined),
+  fff: {
+    enabled: true,
+    scanTimeoutMs: 10_000,
+  },
   swarm: {
     enabled: true,
     maxConcurrent: 5,
@@ -140,6 +164,20 @@ export const CONFIG_DEFAULTS: ResolvedConfig = {
     maxUnsafeScriptSpawns: 10,
   },
 };
+
+function resolveFffConfig(raw: FffConfigInput | undefined): ResolvedFffConfig {
+  const env = process.env.RALPH_FFF_DISABLED?.trim().toLowerCase();
+  const disabledByEnv = env === "1" || env === "true" || env === "yes";
+  return {
+    enabled: disabledByEnv ? false : raw?.enabled ?? CONFIG_DEFAULTS.fff.enabled,
+    scanTimeoutMs: toBoundedInt(
+      raw?.scanTimeoutMs,
+      CONFIG_DEFAULTS.fff.scanTimeoutMs,
+      100,
+      120_000
+    ),
+  };
+}
 
 function resolveSwarmConfig(raw: SwarmConfigInput | undefined): ResolvedSwarmConfig {
   const scriptRunner = raw?.scriptRunner ?? CONFIG_DEFAULTS.swarm.scriptRunner;
@@ -254,6 +292,8 @@ export function resolveConfig(raw: RalphConfigInput): ResolvedConfig {
     reviewerPostToConversation:
       raw.reviewerPostToConversation ?? CONFIG_DEFAULTS.reviewerPostToConversation,
     agentMdPath: raw.agentMdPath ?? CONFIG_DEFAULTS.agentMdPath,
+    plans: resolvePlansConfig(raw.plans),
+    fff: resolveFffConfig(raw.fff),
     swarm: resolveSwarmConfig(raw.swarm),
   };
 
@@ -264,9 +304,23 @@ export function resolveConfig(raw: RalphConfigInput): ResolvedConfig {
   return resolved;
 }
 
+/** Config file lookup order: `.ralph-rlm/ralph.json` then `.opencode/ralph.json`. */
+const CONFIG_CANDIDATES = [
+  [".ralph-rlm", "ralph.json"],
+  [".opencode", "ralph.json"],
+] as const;
+
+async function findConfigPath(worktree: string): Promise<string | undefined> {
+  for (const segments of CONFIG_CANDIDATES) {
+    const candidate = path.join(worktree, ...segments);
+    if (await fileExists(candidate)) return candidate;
+  }
+  return undefined;
+}
+
 export async function loadConfig(worktree: string): Promise<ResolvedConfig> {
-  const cfgPath = path.join(worktree, ".opencode", "ralph.json");
-  if (!(await fileExists(cfgPath))) {
+  const cfgPath = await findConfigPath(worktree);
+  if (!cfgPath) {
     return CONFIG_DEFAULTS;
   }
 

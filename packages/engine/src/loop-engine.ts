@@ -22,7 +22,8 @@ import {
   readPendingInput,
   type PendingQuestion,
 } from "./pending-input.js";
-import { bootstrapProtocolFiles, PROTOCOL_FILES } from "./protocol-files.js";
+import { bootstrapProtocolFiles, loadPlanContext, PROTOCOL_FILES } from "./protocol-files.js";
+import { protocolFilePath, type PlanContext } from "./plan-paths.js";
 import { rolloverState, writeDoneFile } from "./rollover.js";
 import { DEFAULT_TEMPLATES, buildWorkerPrompt, type EngineTemplates } from "./templates.js";
 import { clampLines, nowISO } from "./text.js";
@@ -112,16 +113,26 @@ export function createLoopEngine(
 
   const emit = events.emit.bind(events);
 
+  let planCtx: PlanContext | undefined;
+  /** Resolve (and cache) the active plan context. Refreshed on start(). */
+  async function getPlanContext(): Promise<PlanContext> {
+    if (!planCtx || planCtx.worktree !== state.worktree) {
+      planCtx = await loadPlanContext(state.worktree);
+    }
+    return planCtx;
+  }
+
   async function appendSupervisorLog(
     tag: string,
     message: string,
     level: "info" | "warning" | "error"
   ): Promise<void> {
     const line = `- ${nowISO()} [${level}] ${tag}: ${message}\n`;
-    await appendTextFile(path.join(state.worktree, PROTOCOL_FILES.SUPERVISOR_LOG), line).catch(
+    const ctx = await getPlanContext();
+    await appendTextFile(protocolFilePath(ctx, PROTOCOL_FILES.SUPERVISOR_LOG), line).catch(
       () => {}
     );
-    await appendTextFile(path.join(state.worktree, PROTOCOL_FILES.CONVERSATION), line).catch(
+    await appendTextFile(protocolFilePath(ctx, PROTOCOL_FILES.CONVERSATION), line).catch(
       () => {}
     );
   }
@@ -189,7 +200,7 @@ export function createLoopEngine(
 
   async function notifyPendingQuestions(): Promise<void> {
     if (state.done) return;
-    const pending = listUnansweredQuestions(await readPendingInput(state.worktree));
+    const pending = listUnansweredQuestions(await readPendingInput(await getPlanContext()));
     for (const question of pending) {
       if (state.notifiedQuestionIds.has(question.id)) continue;
       state.notifiedQuestionIds.add(question.id);
@@ -227,7 +238,6 @@ export function createLoopEngine(
     await runtime.client.session.prompt({
       sessionID: workerId,
       directory: state.worktree,
-      noReply: true,
       agent: spawnConfig.agent,
       system: spawnConfig.systemPrompt,
       ...(spawnConfig.providerID && spawnConfig.modelID
@@ -236,7 +246,7 @@ export function createLoopEngine(
       parts: [{ type: "text", text: promptText }],
     });
 
-    await writeLoopAttemptMarker(state.worktree, {
+    await writeLoopAttemptMarker(await getPlanContext(), {
       attempt,
       sessionId: state.sessionId,
       workerSessionId: workerId,
@@ -330,7 +340,7 @@ export function createLoopEngine(
 
       if (parsed.verdict === "pass") {
         state.done = true;
-        await writeDoneFile(state.worktree, templates);
+        await writeDoneFile(await getPlanContext(), templates);
         emit("loop.done", {
           sessionId: state.sessionId,
           attempt: state.attempt,
@@ -368,7 +378,7 @@ export function createLoopEngine(
       });
 
       await rolloverState(
-        state.worktree,
+        await getPlanContext(),
         templates,
         state.attempt,
         parsed.verdict,
@@ -473,11 +483,19 @@ export function createLoopEngine(
 
       const cfg = await loadConfig(state.worktree);
       if (!cfg.enabled) {
-        throw new Error("Ralph loop is disabled in .opencode/ralph.json");
+        throw new Error("Ralph loop is disabled in ralph.json (enabled=false)");
       }
 
+      // Refresh the cached plan context for this run (active plan may have changed).
+      planCtx = await loadPlanContext(state.worktree);
+
       if (partial?.bootstrap ?? config.bootstrap ?? true) {
-        await bootstrapProtocolFiles(state.worktree, templates);
+        const goal = partial?.goal ?? config.goal;
+        await bootstrapProtocolFiles(
+          planCtx,
+          templates,
+          goal ? { goal } : {}
+        );
       }
 
       const restartingFromDone = state.done;
@@ -584,7 +602,7 @@ export function createLoopEngine(
     async status() {
       const cfg = await loadConfig(state.worktree);
       const status = toLoopStatus(state, cfg.maxAttempts);
-      const pending = listUnansweredQuestions(await readPendingInput(state.worktree));
+      const pending = listUnansweredQuestions(await readPendingInput(await getPlanContext()));
       if (pending.length > 0) {
         status.pendingQuestions = pending.map(toQuestionSnapshot);
       }
@@ -592,8 +610,8 @@ export function createLoopEngine(
     },
 
     async peekWorker(maxLines = 120) {
-      const currPath = path.join(state.worktree, PROTOCOL_FILES.CURR);
-      const raw = await readTextFile(currPath).catch(() => "");
+      const ctx = await getPlanContext();
+      const raw = await readTextFile(protocolFilePath(ctx, PROTOCOL_FILES.CURR)).catch(() => "");
       return clampLines(raw, maxLines);
     },
 

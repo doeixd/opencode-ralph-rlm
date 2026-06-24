@@ -72,6 +72,18 @@ try {
     "--external",
     "@opencode-ai/plugin",
   ]);
+  run("build cli", "bun", [
+    "build",
+    "bin/opencode-ralph-rlm.ts",
+    "--outfile",
+    "dist/opencode-ralph-rlm.js",
+    "--target",
+    "node",
+    "--format",
+    "esm",
+    "--external",
+    "nitro",
+  ]);
 
   run(
     "publish @doeixd/opencode-ralph-rlm",

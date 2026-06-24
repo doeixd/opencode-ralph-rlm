@@ -2,7 +2,11 @@ import path from "node:path";
 import { CONFIG_DEFAULTS, loadConfig, type RalphConfigInput, type ResolvedConfig } from "./config.js";
 import { fileExists, readTextFile, writeTextFile } from "./fs.js";
 import { PROTOCOL_FILES } from "./protocol-files.js";
+import { PLAN_GOAL_PLACEHOLDER } from "./templates.js";
+import { protocolFilePath, resolvePlanContext } from "./plan-paths.js";
 import { createOpencodeRuntime } from "./opencode-client.js";
+
+const PACKAGE_NAME = "@doeixd/opencode-ralph-rlm";
 
 export type SetupDiagnostics = {
   ready: boolean;
@@ -63,23 +67,28 @@ export async function checkSetup(
 
   if (!cfg.verify || cfg.verify.command.length === 0) {
     diagnostics.ready = false;
-    diagnostics.issues.push("Missing verify.command in .opencode/ralph.json.");
+    diagnostics.issues.push("Missing verify.command in ralph.json.");
     const defaults = await detectProjectDefaults(root);
     diagnostics.suggestions.push(
       `Set verify.command, e.g. ${JSON.stringify(defaults.verify)}.`
     );
   }
 
-  const planPath = path.join(root, PROTOCOL_FILES.PLAN);
+  const planCtx = await resolvePlanContext(root, cfg.plans);
+  const planPath = protocolFilePath(planCtx, PROTOCOL_FILES.PLAN);
   if (!(await fileExists(planPath))) {
     diagnostics.ready = false;
-    diagnostics.issues.push("Missing PLAN.md.");
+    diagnostics.issues.push(
+      planCtx.mode === "named"
+        ? `Missing PLAN.md (active plan: ${planCtx.planName}).`
+        : "Missing PLAN.md."
+    );
     diagnostics.suggestions.push(
       "Start a loop with start_loop (bootstraps protocol files) or create PLAN.md manually."
     );
   } else {
     const planRaw = await readTextFile(planPath).catch(() => "");
-    if (planRaw.includes("(fill in)")) {
+    if (planRaw.includes(PLAN_GOAL_PLACEHOLDER) || planRaw.includes("(fill in)")) {
       diagnostics.warnings.push("PLAN.md still contains placeholders.");
       diagnostics.suggestions.push(
         "Define goals, milestones, and stopping conditions before long runs."
@@ -103,6 +112,29 @@ export async function checkSetup(
     diagnostics.suggestions.push(
       "Install the ralph-worker plugin so workers get RLM tools and context gating."
     );
+  } else {
+    const packageJsonPath = path.join(root, "package.json");
+    if (await fileExists(packageJsonPath)) {
+      try {
+        const raw = JSON.parse(await readTextFile(packageJsonPath)) as {
+          dependencies?: Record<string, string>;
+          devDependencies?: Record<string, string>;
+          peerDependencies?: Record<string, string>;
+        };
+        const hasPackage =
+          raw.dependencies?.[PACKAGE_NAME] !== undefined ||
+          raw.devDependencies?.[PACKAGE_NAME] !== undefined ||
+          raw.peerDependencies?.[PACKAGE_NAME] !== undefined;
+        if (!hasPackage) {
+          diagnostics.warnings.push(`${PACKAGE_NAME} is not listed in package.json.`);
+          diagnostics.suggestions.push(
+            `Install it locally so OpenCode can resolve the worker plugin: npm install -D ${PACKAGE_NAME}`
+          );
+        }
+      } catch {
+        diagnostics.warnings.push("Could not parse package.json to verify Ralph dependency.");
+      }
+    }
   }
 
   return diagnostics;
@@ -156,7 +188,7 @@ export async function runDoctor(options: {
       const refreshed = await loadConfig(worktree);
       if (refreshed.verify && refreshed.verify.command.length > 0) {
         const verifyIssue = diagnostics.issues.indexOf(
-          "Missing verify.command in .opencode/ralph.json."
+          "Missing verify.command in ralph.json."
         );
         if (verifyIssue >= 0) {
           diagnostics.issues.splice(verifyIssue, 1);

@@ -1,8 +1,10 @@
-import path from "node:path";
 import { fileExists, readTextFile, writeTextFile } from "./fs.js";
+import { stateFilePath, type PlanContext } from "./plan-paths.js";
 import { nowISO } from "./text.js";
 
-/** Relative path (under worktree) for the active loop attempt marker. */
+/** Marker filename, resolved under the plan's state dir. */
+export const LOOP_ATTEMPT_FILE = "loop_attempt.json";
+/** Legacy relative path (under worktree) — retained for reference. */
 export const LOOP_ATTEMPT_REL_PATH = ".opencode/loop_attempt.json";
 
 export type LoopAttemptMarker = {
@@ -13,7 +15,7 @@ export type LoopAttemptMarker = {
 };
 
 export async function writeLoopAttemptMarker(
-  worktree: string,
+  ctx: PlanContext,
   marker: Pick<LoopAttemptMarker, "attempt" | "sessionId"> & {
     workerSessionId?: string;
   }
@@ -27,14 +29,14 @@ export async function writeLoopAttemptMarker(
     payload.workerSessionId = marker.workerSessionId;
   }
   await writeTextFile(
-    path.join(worktree, LOOP_ATTEMPT_REL_PATH),
+    stateFilePath(ctx, LOOP_ATTEMPT_FILE),
     JSON.stringify(payload, null, 2)
   );
 }
 
 /** Returns the current loop attempt from the marker file, if present. */
-export async function readLoopAttemptMarker(worktree: string): Promise<number | undefined> {
-  const filePath = path.join(worktree, LOOP_ATTEMPT_REL_PATH);
+export async function readLoopAttemptMarker(ctx: PlanContext): Promise<number | undefined> {
+  const filePath = stateFilePath(ctx, LOOP_ATTEMPT_FILE);
   if (!(await fileExists(filePath))) return undefined;
   try {
     const parsed = JSON.parse(await readTextFile(filePath)) as Partial<LoopAttemptMarker>;

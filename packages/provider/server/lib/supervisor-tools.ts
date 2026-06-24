@@ -2,13 +2,25 @@ import path from "node:path";
 import {
   PROTOCOL_FILES,
   addPendingAnswer,
-  applyPatch,
+  applyProtocolPatch,
   appendTextFile,
   clampLines,
+  fffFileSearch,
+  fffGlob,
+  fffGrep,
+  isPlanAuthored,
+  listPlans,
   listUnansweredQuestions,
+  loadConfig,
+  loadPlanContext,
   nowISO,
+  protocolFilePath,
+  readActivePlan,
   readPendingInput,
   readTextFile,
+  resolvePlanContext,
+  writeActivePlan,
+  writePlanFile,
   type LoopEngine,
   type OpencodeEventSubscription,
   type OpencodeRuntime,
@@ -57,7 +69,7 @@ export const SUPERVISOR_TOOL_DEFINITIONS: OpenAIToolDefinition[] = [
     function: {
       name: "start_loop",
       description:
-        "Bootstrap protocol files (PLAN.md, RLM_INSTRUCTIONS.md, …) if needed and start attempt 1 with a background worker. Call when the user delegates a goal or implementation task.",
+        "Bootstrap protocol files (PLAN.md, RLM_INSTRUCTIONS.md, …) if needed and start attempt 1 with a background worker. Prefer authoring PLAN.md first (planning interview → write_plan) so the loop runs against a real goal; only start cold if the user says to skip planning. Launches against an existing authored plan without overwriting it.",
       parameters: {
         type: "object",
         properties: {
@@ -130,6 +142,98 @@ export const SUPERVISOR_TOOL_DEFINITIONS: OpenAIToolDefinition[] = [
           maxLines: { type: "integer", minimum: 20, maximum: 2000 },
         },
         required: ["file"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "repo_search",
+      description:
+        "Planning-phase repo discovery. Fuzzy-find files by name, or list files by glob (e.g. **/*.ts). Use during the planning interview to understand the codebase before writing a plan.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Fuzzy file-name query." },
+          glob: { type: "string", description: "Glob pattern, e.g. src/**/*.ts." },
+          limit: { type: "integer", minimum: 1, maximum: 100 },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "repo_grep",
+      description:
+        "Planning-phase content search across the repo. Cross-reference user claims against the actual code during the interview.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Search query (plain text by default)." },
+          mode: { type: "string", enum: ["plain", "regex", "fuzzy"] },
+          limit: { type: "integer", minimum: 1, maximum: 100 },
+        },
+        required: ["query"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "write_plan",
+      description:
+        "Write the authored PLAN.md after the planning interview reaches an approved plan. Replaces the bootstrap placeholder. Call this BEFORE start_loop so the loop launches against a real plan.",
+      parameters: {
+        type: "object",
+        properties: {
+          content: {
+            type: "string",
+            description:
+              "Full PLAN.md markdown. Lead with Goal and domain info; include ## Goal, ## Definition of Done, ## Milestones, plus open questions / invariants / decisions as needed. No file paths or code snippets.",
+          },
+        },
+        required: ["content"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_plans",
+      description:
+        "List named plans under the configured plans directory and the active one. Use when the user asks which plans/versions exist or wants to switch.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "select_plan",
+      description:
+        "Switch the active named plan. Subsequent read_protocol / write_plan / start_loop target this plan's directory.",
+      parameters: {
+        type: "object",
+        properties: { name: { type: "string", description: "Plan name to activate." } },
+        required: ["name"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "new_plan",
+      description:
+        "Create and activate a new named plan (a fresh empty plan directory). Follow with write_plan to author it, then start_loop. Use to keep a separate version without disturbing existing plans.",
+      parameters: {
+        type: "object",
+        properties: { name: { type: "string", description: "New plan name." } },
+        required: ["name"],
         additionalProperties: false,
       },
     },
@@ -298,9 +402,10 @@ export const SUPERVISOR_TOOL_DEFINITIONS: OpenAIToolDefinition[] = [
 ];
 
 async function logGoal(worktree: string, goal: string): Promise<void> {
+  const pctx = await loadPlanContext(worktree);
   const line = `- ${nowISO()} supervisor goal: ${goal.trim()}\n`;
-  await appendTextFile(path.join(worktree, PROTOCOL_FILES.SUPERVISOR_LOG), line);
-  await appendTextFile(path.join(worktree, PROTOCOL_FILES.CONVERSATION), line);
+  await appendTextFile(protocolFilePath(pctx, PROTOCOL_FILES.SUPERVISOR_LOG), line);
+  await appendTextFile(protocolFilePath(pctx, PROTOCOL_FILES.CONVERSATION), line);
 }
 
 export async function executeSupervisorTool(
@@ -434,17 +539,23 @@ export async function executeSupervisorTool(
         await logGoal(ctx.worktree, goal);
       }
 
+      const authoredPlan = await isPlanAuthored(await loadPlanContext(ctx.worktree));
+
       await engine.start({
         sessionId: ctx.sessionKey,
         worktree: ctx.worktree,
         bootstrap,
+        ...(goal ? { goal } : {}),
       });
 
       const status = await engine.status();
       return JSON.stringify(
         {
           ok: true,
-          message: `Started loop — attempt ${status.attempt} running in background.`,
+          authoredPlan,
+          message: authoredPlan
+            ? `Started loop against the authored PLAN.md — attempt ${status.attempt} running in background.`
+            : `Started loop — attempt ${status.attempt} running in background.`,
           status,
         },
         null,
@@ -499,9 +610,65 @@ export async function executeSupervisorTool(
         );
       }
       const maxLines = typeof args.maxLines === "number" ? args.maxLines : 400;
-      const raw = await readTextFile(path.join(ctx.worktree, file)).catch(() => "");
+      const pctx = await loadPlanContext(ctx.worktree);
+      const raw = await readTextFile(protocolFilePath(pctx, file)).catch(() => "");
       return JSON.stringify(
         { ok: true, file, text: clampLines(raw, maxLines) },
+        null,
+        2
+      );
+    }
+
+    case "repo_search": {
+      const query = typeof args.query === "string" ? args.query.trim() : "";
+      const glob = typeof args.glob === "string" ? args.glob.trim() : "";
+      const limit = typeof args.limit === "number" ? args.limit : 25;
+      const cfg = await loadConfig(ctx.worktree);
+      const fffOptions = {
+        worktree: ctx.worktree,
+        enabled: cfg.fff.enabled,
+        scanTimeoutMs: cfg.fff.scanTimeoutMs,
+      };
+      const result = glob
+        ? await fffGlob(fffOptions, glob, limit)
+        : await fffFileSearch(fffOptions, query || "*", limit);
+      return JSON.stringify({ ok: true, result }, null, 2);
+    }
+
+    case "repo_grep": {
+      const query = typeof args.query === "string" ? args.query : "";
+      if (!query.trim()) {
+        return JSON.stringify({ ok: false, error: "query is required" }, null, 2);
+      }
+      const mode =
+        args.mode === "regex" || args.mode === "fuzzy" ? args.mode : "plain";
+      const limit = typeof args.limit === "number" ? args.limit : 25;
+      const cfg = await loadConfig(ctx.worktree);
+      const result = await fffGrep(
+        {
+          worktree: ctx.worktree,
+          enabled: cfg.fff.enabled,
+          scanTimeoutMs: cfg.fff.scanTimeoutMs,
+        },
+        query,
+        { mode, maxMatches: limit, contextLines: 1 }
+      );
+      return JSON.stringify({ ok: true, result }, null, 2);
+    }
+
+    case "write_plan": {
+      const content = typeof args.content === "string" ? args.content : "";
+      if (!content.trim()) {
+        return JSON.stringify({ ok: false, error: "content is required" }, null, 2);
+      }
+      const writeCtx = await loadPlanContext(ctx.worktree);
+      await writePlanFile(writeCtx, content);
+      await appendTextFile(
+        protocolFilePath(writeCtx, PROTOCOL_FILES.SUPERVISOR_LOG),
+        `- ${nowISO()} supervisor authored PLAN.md (planning phase, plan: ${writeCtx.planName || "root"})\n`
+      );
+      return JSON.stringify(
+        { ok: true, updated: PROTOCOL_FILES.PLAN, plan: writeCtx.planName || null, authored: true },
         null,
         2
       );
@@ -513,9 +680,10 @@ export async function executeSupervisorTool(
       if (!patch.trim()) {
         return JSON.stringify({ ok: false, error: "patch is required" }, null, 2);
       }
-      await applyPatch(ctx.worktree, patch);
+      const planCtx = await loadPlanContext(ctx.worktree);
+      await applyProtocolPatch(planCtx, PROTOCOL_FILES.PLAN, patch);
       await appendTextFile(
-        path.join(ctx.worktree, PROTOCOL_FILES.PLAN),
+        protocolFilePath(planCtx, PROTOCOL_FILES.PLAN),
         `\n- ${nowISO()} ${reason}\n`
       );
       return JSON.stringify({ ok: true, updated: PROTOCOL_FILES.PLAN }, null, 2);
@@ -527,12 +695,69 @@ export async function executeSupervisorTool(
       if (!patch.trim()) {
         return JSON.stringify({ ok: false, error: "patch is required" }, null, 2);
       }
-      await applyPatch(ctx.worktree, patch);
+      const instrCtx = await loadPlanContext(ctx.worktree);
+      await applyProtocolPatch(instrCtx, PROTOCOL_FILES.RLM_INSTR, patch);
       await appendTextFile(
-        path.join(ctx.worktree, PROTOCOL_FILES.RLM_INSTR),
+        protocolFilePath(instrCtx, PROTOCOL_FILES.RLM_INSTR),
         `\n- ${nowISO()} ${reason}\n`
       );
       return JSON.stringify({ ok: true, updated: PROTOCOL_FILES.RLM_INSTR }, null, 2);
+    }
+
+    case "list_plans": {
+      const cfg = await loadConfig(ctx.worktree);
+      if (cfg.plans.mode === "legacy") {
+        return JSON.stringify(
+          { ok: true, mode: "legacy", plans: [], active: null, note: "Named plans are not enabled (legacy root layout)." },
+          null,
+          2
+        );
+      }
+      const [plans, active] = await Promise.all([
+        listPlans(ctx.worktree, cfg.plans),
+        readActivePlan(ctx.worktree, cfg.plans),
+      ]);
+      return JSON.stringify({ ok: true, mode: cfg.plans.mode, plans, active }, null, 2);
+    }
+
+    case "select_plan": {
+      const name = typeof args.name === "string" ? args.name.trim() : "";
+      if (!name) {
+        return JSON.stringify({ ok: false, error: "name is required" }, null, 2);
+      }
+      const cfg = await loadConfig(ctx.worktree);
+      if (cfg.plans.mode === "legacy") {
+        return JSON.stringify(
+          { ok: false, error: "Named plans are not enabled (legacy root layout)." },
+          null,
+          2
+        );
+      }
+      const active = await writeActivePlan(ctx.worktree, cfg.plans, name);
+      return JSON.stringify({ ok: true, active }, null, 2);
+    }
+
+    case "new_plan": {
+      const name = typeof args.name === "string" ? args.name.trim() : "";
+      if (!name) {
+        return JSON.stringify({ ok: false, error: "name is required" }, null, 2);
+      }
+      const cfg = await loadConfig(ctx.worktree);
+      if (cfg.plans.mode === "legacy") {
+        return JSON.stringify(
+          { ok: false, error: "Named plans are not enabled (legacy root layout)." },
+          null,
+          2
+        );
+      }
+      const active = await writeActivePlan(ctx.worktree, cfg.plans, name);
+      // Resolve the new plan's context so subsequent write_plan / start_loop target it.
+      const newCtx = await resolvePlanContext(ctx.worktree, cfg.plans, active);
+      return JSON.stringify(
+        { ok: true, active, protocolDir: newCtx.protocolRel, note: "Empty plan selected. Use write_plan to author PLAN.md, then start_loop." },
+        null,
+        2
+      );
     }
 
     case "last_verify_output": {
@@ -544,7 +769,8 @@ export async function executeSupervisorTool(
     }
 
     case "list_worker_questions": {
-      const pending = listUnansweredQuestions(await readPendingInput(ctx.worktree));
+      const pctx = await loadPlanContext(ctx.worktree);
+      const pending = listUnansweredQuestions(await readPendingInput(pctx));
       return JSON.stringify({ ok: true, questions: pending }, null, 2);
     }
 
@@ -559,7 +785,8 @@ export async function executeSupervisorTool(
         );
       }
 
-      const pending = listUnansweredQuestions(await readPendingInput(ctx.worktree));
+      const pctx = await loadPlanContext(ctx.worktree);
+      const pending = listUnansweredQuestions(await readPendingInput(pctx));
       if (!pending.some((question) => question.id === questionId)) {
         return JSON.stringify(
           {
@@ -572,9 +799,9 @@ export async function executeSupervisorTool(
         );
       }
 
-      await addPendingAnswer(ctx.worktree, questionId, answer);
+      await addPendingAnswer(pctx, questionId, answer);
       const line = `- ${nowISO()} supervisor answered ${questionId}: ${answer.trim()}\n`;
-      await appendTextFile(path.join(ctx.worktree, PROTOCOL_FILES.CONVERSATION), line);
+      await appendTextFile(protocolFilePath(pctx, PROTOCOL_FILES.CONVERSATION), line);
       return JSON.stringify({ ok: true, questionId, answered: true }, null, 2);
     }
 

@@ -8,6 +8,8 @@ import {
   type SupervisorToolContext,
 } from "./supervisor-tools.js";
 import { getEngineForSession } from "./loop-service.js";
+import { loadPlanningPlaybook } from "./planning.js";
+import { isPlanAuthored, loadPlanContext } from "@doeixd/opencode-ralph-rlm-engine";
 
 export type SupervisorTurnInput = {
   sessionKey: string;
@@ -32,10 +34,13 @@ const SUPERVISOR_SYSTEM_PROMPT = [
   "- Protocol files (PLAN.md, RLM_INSTRUCTIONS.md, CURRENT_STATE.md, …) are durable memory across attempts.",
   "",
   "## User intent → tool routing",
-  "- Delegate a goal / \"implement X\" / \"fix tests\" → `start_loop` with goal (bootstrap true unless files exist).",
+  "- Delegate a goal / \"implement X\" / \"fix tests\" → first ensure an authored PLAN.md exists.",
+  "  - If no authored plan exists, run the PLANNING PHASE (its playbook is appended to this prompt when active) — interview, sketch, write_plan, get approval — THEN `start_loop`.",
+  "  - If an authored plan already exists (e.g. written via the interview-and-create-plan skill), or the user explicitly says skip planning / just go, call `start_loop` with the goal directly.",
   "- Status / progress / \"where are we\" → `loop_status`; optionally `peek_worker` or `last_verify_output`.",
   "- Pause / hold / stop spawning → `pause_loop`. Resume → `resume_loop`. Stop / cancel → `stop_loop`.",
   "- Inspect plan or instructions → `read_protocol` (PLAN.md, RLM_INSTRUCTIONS.md, …).",
+  "- Manage named plans/versions → `list_plans`, `select_plan <name>`, `new_plan <name>` (keep separate versions, switch between them).",
   "- Change strategy → `update_plan` or `update_rlm_instructions` (unified diff patches + reason).",
   "- Worker blocked on `ralph_ask` → `list_worker_questions` then `answer_worker` with question id.",
   "- Parallel side tasks → `spawn_swarm` (declarative tasks); `swarm_status` / `swarm_collect` / `swarm_cancel`.",
@@ -44,6 +49,9 @@ const SUPERVISOR_SYSTEM_PROMPT = [
   "## After start_loop",
   "- Acknowledge immediately: attempt 1 is running in the background; user can ask for status anytime.",
   "- Do not block waiting for verify. Long work happens asynchronously.",
+  "",
+  "## Automated messages",
+  "- A message prefixed \"[Automated message from <source>…]\" comes from an external watcher/script, not a human at the keyboard. Act on it like any instruction (e.g. pause, replan, report), but keep the response self-contained — no one may be waiting to reply.",
   "",
   "## Communication style",
   "- Concise, action-oriented. Summarize attempt number, worker state, last verify verdict when reporting status.",
@@ -143,8 +151,16 @@ async function runLlmTurn(
   ctx: SupervisorToolContext
 ): Promise<SupervisorTurnResult> {
   const config = await loadSupervisorLlmConfig(ctx.worktree);
+
+  const planAuthored = await loadPlanContext(ctx.worktree)
+    .then((planCtx) => isPlanAuthored(planCtx))
+    .catch(() => false);
+  const systemContent = planAuthored
+    ? `${SUPERVISOR_SYSTEM_PROMPT}\n\n## Plan status\n- An authored PLAN.md already exists. When the user says go, call start_loop directly — do not re-run the planning interview unless they ask to revise the plan.`
+    : `${SUPERVISOR_SYSTEM_PROMPT}\n\n## PLANNING PHASE\n- No authored PLAN.md yet. When the user delegates a goal, run this interview before start_loop. Use repo_search / repo_grep to explore, write_plan to record the agreed plan, then start_loop only after approval.\n\n${await loadPlanningPlaybook(ctx.worktree)}`;
+
   const conversation: OpenAIChatMessage[] = [
-    { role: "system", content: SUPERVISOR_SYSTEM_PROMPT },
+    { role: "system", content: systemContent },
     ...input.messages.filter((m) => m.role !== "system"),
   ];
 
@@ -194,6 +210,28 @@ async function runLlmTurn(
   };
 }
 
+/**
+ * Per-session serialization. TUI completions and out-of-band injected messages
+ * (POST /api/loops/:sessionId/message) both run supervisor turns; this ensures
+ * they don't overlap and double-act on the same loop.
+ */
+const sessionTurnLocks = new Map<string, Promise<unknown>>();
+
+async function withSessionTurnLock<T>(
+  key: string,
+  fn: () => Promise<T>
+): Promise<T> {
+  const prev = (sessionTurnLocks.get(key) ?? Promise.resolve()).catch(() => {});
+  const run = prev.then(fn);
+  const tail = run.catch(() => {});
+  sessionTurnLocks.set(key, tail);
+  // Reclaim the map entry once this is the last queued turn for the session.
+  void tail.then(() => {
+    if (sessionTurnLocks.get(key) === tail) sessionTurnLocks.delete(key);
+  });
+  return run;
+}
+
 export async function supervisorTurn(
   input: SupervisorTurnInput
 ): Promise<SupervisorTurnResult> {
@@ -202,9 +240,7 @@ export async function supervisorTurn(
     worktree: input.worktree,
   };
 
-  if (isTestMode()) {
-    return runTestModeTurn(input, ctx);
-  }
-
-  return runLlmTurn(input, ctx);
+  return withSessionTurnLock(input.sessionKey, () =>
+    isTestMode() ? runTestModeTurn(input, ctx) : runLlmTurn(input, ctx)
+  );
 }

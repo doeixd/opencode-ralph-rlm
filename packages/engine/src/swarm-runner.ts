@@ -1,4 +1,3 @@
-import path from "node:path";
 import { loadConfig } from "./config.js";
 import { appendTextFile } from "./fs.js";
 import {
@@ -7,7 +6,8 @@ import {
   type OpencodeEventSubscription,
   type OpencodeRuntime,
 } from "./opencode-client.js";
-import { PROTOCOL_FILES } from "./protocol-files.js";
+import { loadPlanContext, PROTOCOL_FILES } from "./protocol-files.js";
+import { protocolFilePath } from "./plan-paths.js";
 import { SwarmEventBus, type SwarmEventHandler, type SwarmEventName } from "./swarm-events.js";
 import {
   createSwarmTasks,
@@ -97,7 +97,8 @@ export function createSwarmRunner(
 
   async function logSwarm(message: string, level: "info" | "warning" | "error"): Promise<void> {
     const line = `- ${nowISO()} [${level}] swarm/${state.swarmId}: ${message}\n`;
-    await appendTextFile(path.join(state.worktree, PROTOCOL_FILES.SUPERVISOR_LOG), line).catch(
+    const pctx = await loadPlanContext(state.worktree);
+    await appendTextFile(protocolFilePath(pctx, PROTOCOL_FILES.SUPERVISOR_LOG), line).catch(
       () => {}
     );
   }
@@ -339,10 +340,10 @@ export function createSwarmRunner(
       try {
         const ralphCfg = await loadConfig(state.worktree);
         if (!ralphCfg.swarm.enabled) {
-          throw new Error("Swarm is disabled in .opencode/ralph.json (swarm.enabled=false)");
+          throw new Error("Swarm is disabled in ralph.json (swarm.enabled=false)");
         }
         if (!ralphCfg.subAgentEnabled) {
-          throw new Error("Swarm requires subAgentEnabled=true in .opencode/ralph.json");
+          throw new Error("Swarm requires subAgentEnabled=true in ralph.json");
         }
 
         if (state.tasks.length === 0) {

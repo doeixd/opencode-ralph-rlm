@@ -28,4 +28,22 @@ describe("resolveConfig", () => {
     expect(cfg.swarm.maxConcurrent).toBe(5);
     expect(cfg.swarm.unsafeEvalEnabled).toBe(false);
   });
+
+  test("resolves fff defaults and env disable override", () => {
+    const previous = process.env.RALPH_FFF_DISABLED;
+    try {
+      delete process.env.RALPH_FFF_DISABLED;
+      expect(resolveConfig({}).fff).toEqual({ enabled: true, scanTimeoutMs: 10_000 });
+      expect(resolveConfig({ fff: { enabled: false, scanTimeoutMs: 5 } }).fff).toEqual({
+        enabled: false,
+        scanTimeoutMs: 100,
+      });
+
+      process.env.RALPH_FFF_DISABLED = "1";
+      expect(resolveConfig({ fff: { enabled: true } }).fff.enabled).toBe(false);
+    } finally {
+      if (previous === undefined) delete process.env.RALPH_FFF_DISABLED;
+      else process.env.RALPH_FFF_DISABLED = previous;
+    }
+  });
 });

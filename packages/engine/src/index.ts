@@ -4,13 +4,30 @@ export {
   resolveConfig,
   isSwarmUnsafeEvalEnabled,
   type RalphConfigInput,
+  type FffConfigInput,
   type ResolvedConfig,
+  type ResolvedFffConfig,
   type ResolvedSwarmConfig,
   type SwarmConfigInput,
   type SwarmScriptRunner,
   type StatusVerbosity,
   type VerifyConfig,
 } from "./config.js";
+
+export {
+  clearFffSearchCache,
+  fffFileSearch,
+  fffGlob,
+  fffGrep,
+  getFffAvailability,
+  type FffLoader,
+  type FffSearchOptions,
+  type FffUnavailable,
+  type NormalizedFileSearchItem,
+  type NormalizedFileSearchResult,
+  type NormalizedGlobResult,
+  type NormalizedGrepResult,
+} from "./fff-search.js";
 
 export {
   FileError,
@@ -34,15 +51,39 @@ export {
 export {
   DEFAULT_TEMPLATES,
   buildWorkerPrompt,
+  PLAN_GOAL_PLACEHOLDER,
+  PLAN_DOD_PLACEHOLDER,
   type EngineTemplates,
 } from "./templates.js";
 
 export {
   PROTOCOL_FILES,
   bootstrapProtocolFiles,
+  isPlanAuthored,
+  writePlanFile,
   applyPatch,
+  applyProtocolPatch,
+  loadPlanContext,
+  type BootstrapOptions,
   type ProtocolFileName,
 } from "./protocol-files.js";
+
+export {
+  resolvePlansConfig,
+  resolvePlanContext,
+  readActivePlan,
+  writeActivePlan,
+  listPlans,
+  normalizePlanName,
+  protocolFilePath,
+  stateFilePath,
+  DEFAULT_PLANS_DIR,
+  DEFAULT_PLAN_NAME,
+  type PlansConfigInput,
+  type ResolvedPlansConfig,
+  type PlansMode,
+  type PlanContext,
+} from "./plan-paths.js";
 
 export {
   runCommand,
@@ -174,3 +215,12 @@ export {
   type SetupDiagnostics,
   type DoctorReport,
 } from "./doctor.js";
+
+export {
+  setupProject,
+  formatSetupResult,
+  type SetupAction,
+  type SetupActionStatus,
+  type SetupOptions,
+  type SetupResult,
+} from "./setup.js";

@@ -175,7 +175,7 @@ export async function runSwarmScript(input: SwarmScriptRunInput): Promise<SwarmS
       stdout: "",
       stderr: "",
       error:
-        "swarm_unsafe_runtime_code_eval is disabled. Set swarm.unsafeEvalEnabled=true in .opencode/ralph.json or RALPH_SWARM_UNSAFE_EVAL=1.",
+        "swarm_unsafe_runtime_code_eval is disabled. Set swarm.unsafeEvalEnabled=true in ralph.json or RALPH_SWARM_UNSAFE_EVAL=1.",
     };
   }
 

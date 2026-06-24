@@ -55,5 +55,17 @@ run(bunExe, [
   "--external",
   "@opencode-ai/plugin",
 ]);
+run(bunExe, [
+  "build",
+  "bin/opencode-ralph-rlm.ts",
+  "--outfile",
+  "dist/opencode-ralph-rlm.js",
+  "--target",
+  "node",
+  "--format",
+  "esm",
+  "--external",
+  "nitro",
+]);
 
 console.log("[verify] OK");

@@ -32,6 +32,18 @@ describe("shouldGateDestructiveTool", () => {
     ).toBe(false);
   });
 
+  test("allows fff search tools before context loaded", () => {
+    for (const toolName of ["rlm_file_search", "rlm_glob"]) {
+      expect(
+        shouldGateDestructiveTool({
+          gateEnabled: true,
+          loadedContext: false,
+          toolName,
+        })
+      ).toBe(false);
+    }
+  });
+
   test("ignores gate when disabled in config", () => {
     expect(
       shouldGateDestructiveTool({

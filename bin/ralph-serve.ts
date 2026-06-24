@@ -11,7 +11,7 @@
 import { spawn } from "child_process";
 import { fileURLToPath } from "url";
 import { dirname, join, resolve } from "path";
-import { formatDoctorReport, runDoctor } from "@doeixd/opencode-ralph-rlm-engine";
+import { formatDoctorReport, runDoctor } from "@doeixd/opencode-ralph-rlm/engine";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const providerDir = join(__dirname, "..", "packages", "provider");

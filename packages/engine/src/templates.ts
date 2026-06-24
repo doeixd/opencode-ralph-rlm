@@ -1,5 +1,15 @@
 import { interpolate } from "./text.js";
 
+/**
+ * Placeholder text written into PLAN.md when start_loop bootstraps without a
+ * concrete goal. Its presence marks a plan as "not yet authored" — the planning
+ * skill (or the supervisor planning phase) replaces it with a real goal.
+ */
+export const PLAN_GOAL_PLACEHOLDER =
+  "(describe the user-facing outcome in one sentence)";
+export const PLAN_DOD_PLACEHOLDER =
+  "(add acceptance criteria: tests, types, behavior)";
+
 export type EngineTemplates = {
   continuePrompt: string;
   doneFileContent: string;
@@ -18,9 +28,9 @@ export const DEFAULT_TEMPLATES: EngineTemplates = {
     "1. Call ralph_load_context() FIRST — required before write / edit / bash.",
     "2. Read AGENT_CONTEXT_FOR_NEXT_RALPH.md (summary + this next-step block).",
     "3. Treat PLAN.md + RLM_INSTRUCTIONS.md as authoritative.",
-    "4. Use rlm_grep + rlm_slice for CONTEXT_FOR_RLM.md — never dump it whole.",
+    "4. Use rlm_file_search / rlm_glob to find files, then rlm_grep + rlm_slice for large files — never dump CONTEXT_FOR_RLM.md whole.",
     "5. Keep CURRENT_STATE.md updated as scratch for this attempt only.",
-    "6. Put durable learnings in NOTES_AND_LEARNINGS.md; milestone changes in PLAN.md.",
+    "6. Curate NOTES_AND_LEARNINGS.md (edit / reorganize / prune — not append-only); link out to domain glossary, ADRs, and design docs rather than restating them. Milestone changes go in PLAN.md.",
     "7. Fix the failing verification gate. When ready, call ralph_verify() once, then STOP.",
     "",
     "If verify.command or tooling is broken, fix that before feature work.",
@@ -40,11 +50,11 @@ export const DEFAULT_TEMPLATES: EngineTemplates = {
     "# Plan",
     "",
     "## Goal",
-    "- (describe the user-facing outcome in one sentence)",
+    "- {{goal}}",
     "",
     "## Definition of Done",
-    "- verify.command passes (see .opencode/ralph.json)",
-    "- (add acceptance criteria: tests, types, behavior)",
+    "- verify.command passes (see ralph.json)",
+    "- {{definitionOfDone}}",
     "",
     "## Milestones",
     "- [ ] Understand failure / baseline",
@@ -70,8 +80,10 @@ export const DEFAULT_TEMPLATES: EngineTemplates = {
     "- You MUST call `ralph_load_context()` at the start of EVERY attempt (before write / edit / bash).",
     "- **Authority:** PLAN.md and this file override chat history.",
     "- **Large reference:** CONTEXT_FOR_RLM.md — use `rlm_grep` + `rlm_slice` only; never paste it whole.",
+    "- **Repository search:** use `rlm_file_search` or `rlm_glob` to locate files before reading broad areas.",
+    "- **Paths:** protocol files live in the active plan dir — `ralph_load_context()` returns `plan_dir` and a `protocol_paths` map; edit scratch/notes/todos at those paths (they may be under .ralph-rlm/plans/<name>/, not the repo root).",
     "- **Scratch:** CURRENT_STATE.md — this attempt only; reset each rollover.",
-    "- **Durable:** NOTES_AND_LEARNINGS.md (append-only), PLAN.md (milestones / constraints only).",
+    "- **Durable:** NOTES_AND_LEARNINGS.md — a curated knowledge base you edit, reorganize, and prune (NOT append-only); keep links to the domain glossary, ADRs, and design docs here. PLAN.md (milestones / constraints only).",
     "- **Visibility:** `ralph_report()` writes to SUPERVISOR_LOG.md + CONVERSATION.md.",
     "- **Exit gate:** `ralph_verify()` runs verify.command once; then STOP (engine handles pass/fail).",
     "- **Blocking decisions:** `ralph_ask()` — use sparingly; supervisor answers via pending_input.",
@@ -87,7 +99,7 @@ export const DEFAULT_TEMPLATES: EngineTemplates = {
     "",
     "## Debug Playbook (editable)",
     "- Reproduce: read last verify output from context / AGENT_CONTEXT_FOR_NEXT_RALPH.md.",
-    "- Narrow: `rlm_grep` → `rlm_slice` → form hypothesis → patch → `ralph_verify()`.",
+    "- Narrow: `rlm_file_search` / `rlm_glob` → `rlm_grep` → `rlm_slice` → form hypothesis → patch → `ralph_verify()`.",
     "- If stuck on product/architecture choice: `ralph_ask()` with concrete options.",
     "- If verify.command itself is wrong: fix scripts/config first, then feature work.",
     "",
@@ -140,9 +152,11 @@ export const DEFAULT_TEMPLATES: EngineTemplates = {
     "",
     "## File-first protocol (mandatory)",
     "- Call `ralph_load_context()` before any write / edit / bash (enforced by plugin gate).",
-    "- PLAN.md + RLM_INSTRUCTIONS.md are authoritative.",
+    "- Protocol files live in the active plan dir (`plan_dir` from load_context; may be under .ralph-rlm/plans/<name>/, not the repo root). Use the `protocol_paths` map when editing them directly.",
+    "- PLAN.md + RLM_INSTRUCTIONS.md are authoritative; change them via `ralph_update_plan` / `ralph_update_rlm_instructions`.",
     "- CONTEXT_FOR_RLM.md is large — `rlm_grep` + `rlm_slice` only.",
-    "- CURRENT_STATE.md = scratch for this attempt; NOTES_AND_LEARNINGS.md = durable insights.",
+    "- Use `rlm_file_search` and `rlm_glob` for fast worktree discovery before broad reads.",
+    "- CURRENT_STATE.md = scratch for this attempt; NOTES_AND_LEARNINGS.md = curated durable knowledge (edit/prune freely; link to domain glossary / ADRs / design docs). Edit both at their `protocol_paths`.",
     "- AGENT.md (if present) = static project rules from load_context.",
     "",
     "## One-pass lifecycle",
@@ -155,7 +169,8 @@ export const DEFAULT_TEMPLATES: EngineTemplates = {
     "- ralph_report — supervisor-visible progress (start, milestones, before verify)",
     "- ralph_set_status — running | blocked | done | error",
     "- ralph_verify — runs verify.command; ends your session",
-    "- rlm_grep / rlm_slice — search large reference files",
+    "- rlm_file_search / rlm_glob — fast worktree discovery",
+    "- rlm_grep / rlm_slice — search and slice large reference files",
     "- ralph_update_plan / ralph_update_rlm_instructions — durable strategy changes only",
     "- ralph_ask — blocking human/supervisor decision only (not for status checks)",
     "",
@@ -186,8 +201,9 @@ export const DEFAULT_TEMPLATES: EngineTemplates = {
     "",
     "## Tool cheat sheet",
     "- ralph_report → SUPERVISOR_LOG.md + CONVERSATION.md",
-    "- ralph_verify → verify.command from .opencode/ralph.json",
+    "- ralph_verify → verify.command from ralph.json",
     "- ralph_ask → blocking question; wait for supervisor answer",
+    "- rlm_file_search / rlm_glob → find likely files",
     "- rlm_grep / rlm_slice → CONTEXT_FOR_RLM.md and other large files",
   ].join("\n"),
 };

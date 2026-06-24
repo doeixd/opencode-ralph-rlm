@@ -1,4 +1,4 @@
-import { DEFAULT_TEMPLATES, readTextFile } from "@doeixd/opencode-ralph-rlm-engine";
+import { DEFAULT_TEMPLATES, readTextFile } from "@doeixd/opencode-ralph-rlm/engine";
 import path from "node:path";
 
 export type WorkerPluginTemplates = {
@@ -15,14 +15,16 @@ const DEFAULTS: WorkerPluginTemplates = {
     "## Ralph file-first protocol (reload after compaction)",
     "",
     "### Authority (read via ralph_load_context)",
+    "- ralph_load_context returns plan_dir + a protocol_paths map; protocol files may live under .ralph-rlm/plans/<name>/, not the repo root — edit them at those paths.",
     "- PLAN.md — goal, definition of done, milestones",
     "- RLM_INSTRUCTIONS.md — playbooks for this repo",
     "- AGENT_CONTEXT_FOR_NEXT_RALPH.md — prior attempt verdict + next step",
     "- CURRENT_STATE.md — scratch for this attempt only",
     "- PREVIOUS_STATE.md — snapshot of last attempt scratch",
-    "- NOTES_AND_LEARNINGS.md — append-only durable learnings",
+    "- NOTES_AND_LEARNINGS.md — curated durable knowledge (edit/prune freely; link to domain glossary / ADRs / design docs)",
     "- CONVERSATION.md / SUPERVISOR_LOG.md — progress feed",
     "- CONTEXT_FOR_RLM.md — large reference; rlm_grep + rlm_slice only",
+    "- Worktree discovery — use rlm_file_search or rlm_glob before broad reads",
     "",
     "### Worker lifecycle (one pass)",
     "ralph_load_context → ralph_report(plan) → implement → ralph_verify() → STOP",

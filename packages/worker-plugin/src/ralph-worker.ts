@@ -4,20 +4,27 @@ import path from "node:path";
 import {
   PROTOCOL_FILES,
   appendTextFile,
-  applyPatch,
+  applyProtocolPatch,
   clampLines,
   extractHeadings,
+  fffFileSearch,
+  fffGlob,
+  fffGrep,
   formatVerifyJson,
   loadConfig,
   nowISO,
+  protocolFilePath,
   readLoopAttemptMarker,
   readPendingInput,
   readTextFile,
   regexFromQuery,
+  resolvePlanContext,
   runVerify,
   writePendingInput,
+  type NormalizedGrepResult,
+  type PlanContext,
   type ResolvedConfig,
-} from "@doeixd/opencode-ralph-rlm-engine";
+} from "@doeixd/opencode-ralph-rlm/engine";
 import { shouldGateDestructiveTool } from "./gate.js";
 import { freshWorkerSession, type WorkerSessionState } from "./session-state.js";
 import { loadWorkerPluginTemplates } from "./templates.js";
@@ -35,6 +42,19 @@ export const RalphWorkerPlugin: Plugin = async ({ client, worktree }) => {
     return value;
   }
 
+  /** Resolve the active plan context for a worktree root (active-plan aware). */
+  async function getPlanCtx(root: string): Promise<PlanContext> {
+    const cfg = await getConfig();
+    return resolvePlanContext(root, cfg.plans);
+  }
+
+  /** Worktree-relative path to CONTEXT_FOR_RLM.md for the active plan. */
+  function rlmCtxRel(pctx: PlanContext): string {
+    return pctx.protocolRel
+      ? `${pctx.protocolRel}/${PROTOCOL_FILES.RLM_CTX}`
+      : PROTOCOL_FILES.RLM_CTX;
+  }
+
   function getSession(sessionID: string, attempt = 0): WorkerSessionState {
     if (!sessionMap.has(sessionID)) {
       sessionMap.set(sessionID, freshWorkerSession(attempt));
@@ -43,10 +63,73 @@ export const RalphWorkerPlugin: Plugin = async ({ client, worktree }) => {
   }
 
   async function syncSessionAttempt(sessionID: string, root: string): Promise<void> {
-    const fromMarker = await readLoopAttemptMarker(root);
+    const fromMarker = await readLoopAttemptMarker(await getPlanCtx(root));
     if (fromMarker !== undefined) {
       getSession(sessionID).attempt = fromMarker;
     }
+  }
+
+  async function grepFileFallback(input: {
+    root: string;
+    fileRel: string;
+    query: string;
+    maxMatches: number;
+    contextLines: number;
+  }): Promise<{
+    file: string;
+    totalMatches: number;
+    accelerated: false;
+    fallbackReason?: string;
+    results: Array<{
+      matchLine: number;
+      matchText: string;
+      context?: Array<{ line: number; text: string }>;
+    }>;
+  }> {
+    const raw = await readTextFile(path.join(input.root, input.fileRel));
+    const lines = raw.split(/\r?\n/);
+    const re = regexFromQuery(input.query);
+
+    const matchedIndices: number[] = [];
+    for (let i = 0; i < lines.length; i++) {
+      if (re.test(lines[i] ?? "")) {
+        matchedIndices.push(i);
+        if (matchedIndices.length >= input.maxMatches) break;
+      }
+    }
+
+    const results = matchedIndices.map((i) => {
+      const start = Math.max(0, i - input.contextLines);
+      const end = Math.min(lines.length - 1, i + input.contextLines);
+      const result: {
+        matchLine: number;
+        matchText: string;
+        context?: Array<{ line: number; text: string }>;
+      } = {
+        matchLine: i + 1,
+        matchText: lines[i] ?? "",
+      };
+      if (input.contextLines > 0) {
+        result.context = lines.slice(start, end + 1).map((text, offset) => ({
+          line: start + offset + 1,
+          text,
+        }));
+      }
+      return result;
+    });
+
+    return { file: input.fileRel, totalMatches: results.length, accelerated: false, results };
+  }
+
+  function grepMatchesTargetFile(result: NormalizedGrepResult, fileRel: string): boolean {
+    // FFF may return OS-native separators; compare on forward slashes so the
+    // accelerated path is used in named-plan mode on Windows too.
+    const target = fileRel.split(/[\\/]/).join("/");
+    return (
+      result.ok &&
+      result.results.length > 0 &&
+      result.results.every((match) => match.file.split(/[\\/]/).join("/") === target)
+    );
   }
 
   async function appendProgress(
@@ -56,8 +139,9 @@ export const RalphWorkerPlugin: Plugin = async ({ client, worktree }) => {
     level: "info" | "warning" | "error"
   ): Promise<void> {
     const line = `- ${nowISO()} [${level}] ${tag}: ${message}\n`;
-    await appendTextFile(path.join(root, PROTOCOL_FILES.SUPERVISOR_LOG), line);
-    await appendTextFile(path.join(root, PROTOCOL_FILES.CONVERSATION), line);
+    const pctx = await getPlanCtx(root);
+    await appendTextFile(protocolFilePath(pctx, PROTOCOL_FILES.SUPERVISOR_LOG), line);
+    await appendTextFile(protocolFilePath(pctx, PROTOCOL_FILES.CONVERSATION), line);
     const variant = level === "error" ? "error" : level === "warning" ? "warning" : "info";
     await client.tui
       .showToast({
@@ -81,9 +165,9 @@ export const RalphWorkerPlugin: Plugin = async ({ client, worktree }) => {
       st.loadedContext = true;
 
       const cfg = await getConfig();
-      const j = (f: string) => path.join(root, f);
-
-      const agentMdAbs = cfg.agentMdPath ? j(cfg.agentMdPath) : null;
+      const pctx = await getPlanCtx(root);
+      const jp = (f: string) => protocolFilePath(pctx, f);
+      const agentMdAbs = cfg.agentMdPath ? path.join(root, cfg.agentMdPath) : null;
       const [
         plan,
         rlmInstr,
@@ -96,17 +180,17 @@ export const RalphWorkerPlugin: Plugin = async ({ client, worktree }) => {
         rlmRaw,
         agentMd,
       ] = await Promise.all([
-        readTextFile(j(PROTOCOL_FILES.PLAN)).catch(() => "(missing — create PLAN.md)"),
-        readTextFile(j(PROTOCOL_FILES.RLM_INSTR)).catch(
+        readTextFile(jp(PROTOCOL_FILES.PLAN)).catch(() => "(missing — create PLAN.md)"),
+        readTextFile(jp(PROTOCOL_FILES.RLM_INSTR)).catch(
           () => "(missing — create RLM_INSTRUCTIONS.md)"
         ),
-        readTextFile(j(PROTOCOL_FILES.NEXT_RALPH)).catch(() => "(none)"),
-        readTextFile(j(PROTOCOL_FILES.CURR)).catch(() => "(empty)"),
-        readTextFile(j(PROTOCOL_FILES.PREV)).catch(() => "(none yet)"),
-        readTextFile(j(PROTOCOL_FILES.NOTES)).catch(() => "(empty)"),
-        readTextFile(j(PROTOCOL_FILES.TODOS)).catch(() => "(empty)"),
-        readTextFile(j(PROTOCOL_FILES.CONVERSATION)).catch(() => "(empty)"),
-        readTextFile(j(PROTOCOL_FILES.RLM_CTX)).catch(() => ""),
+        readTextFile(jp(PROTOCOL_FILES.NEXT_RALPH)).catch(() => "(none)"),
+        readTextFile(jp(PROTOCOL_FILES.CURR)).catch(() => "(empty)"),
+        readTextFile(jp(PROTOCOL_FILES.PREV)).catch(() => "(none yet)"),
+        readTextFile(jp(PROTOCOL_FILES.NOTES)).catch(() => "(empty)"),
+        readTextFile(jp(PROTOCOL_FILES.TODOS)).catch(() => "(empty)"),
+        readTextFile(jp(PROTOCOL_FILES.CONVERSATION)).catch(() => "(empty)"),
+        readTextFile(jp(PROTOCOL_FILES.RLM_CTX)).catch(() => ""),
         agentMdAbs
           ? readTextFile(agentMdAbs).catch(() => null as string | null)
           : Promise.resolve(null as string | null),
@@ -117,8 +201,22 @@ export const RalphWorkerPlugin: Plugin = async ({ client, worktree }) => {
         ? extractHeadings(rlmRaw, args.rlmHeadingsMax ?? 80)
         : clampLines(rlmRaw, 200);
 
+      // Worktree-relative path to each protocol file for the ACTIVE plan. In
+      // named-plan mode these live under .ralph-rlm/plans/<name>/, so a worker
+      // editing CURRENT_STATE.md / NOTES_AND_LEARNINGS.md / TODOS.md directly
+      // must use these paths, not the bare filename (which would hit repo root).
+      const protRel = (file: string) =>
+        pctx.protocolRel ? `${pctx.protocolRel}/${file}` : file;
+      const protocolPaths = Object.fromEntries(
+        Object.values(PROTOCOL_FILES).map((file) => [file, protRel(file)])
+      );
+
       const payload: Record<string, unknown> = {
-        protocol_files: PROTOCOL_FILES,
+        plan_dir: pctx.protocolRel || ".",
+        plan_name: pctx.planName || null,
+        protocol_paths: protocolPaths,
+        edit_protocol_note:
+          "When editing CURRENT_STATE.md, NOTES_AND_LEARNINGS.md, or TODOS.md directly, use the path in protocol_paths (they live in plan_dir, which may not be the repo root). Edit PLAN.md / RLM_INSTRUCTIONS.md via ralph_update_plan / ralph_update_rlm_instructions.",
         plan,
         rlm_instructions: rlmInstr,
         agent_context_for_next_ralph: nextRalph,
@@ -128,7 +226,7 @@ export const RalphWorkerPlugin: Plugin = async ({ client, worktree }) => {
         todos: clampLines(todos, 200),
         conversation_log: clampLines(conversation, 200),
         context_for_rlm: {
-          path: PROTOCOL_FILES.RLM_CTX,
+          path: protRel(PROTOCOL_FILES.RLM_CTX),
           headings: rlmContext,
           policy: "Use rlm_grep + rlm_slice to access this file. Never dump it fully.",
         },
@@ -163,42 +261,95 @@ export const RalphWorkerPlugin: Plugin = async ({ client, worktree }) => {
     async execute(args, ctx) {
       const root = ctx.worktree ?? worktree;
       const sessionID = ctx.sessionID ?? "default";
-      const fileRel = args.file ?? PROTOCOL_FILES.RLM_CTX;
-      const raw = await readTextFile(path.join(root, fileRel));
-      const lines = raw.split(/\r?\n/);
-      const re = regexFromQuery(args.query);
+      const cfg = await getConfig();
+      const fileRel = args.file ?? rlmCtxRel(await getPlanCtx(root));
       const ctxLines = args.contextLines ?? 0;
       const maxM = args.maxMatches ?? 50;
 
-      const matchedIndices: number[] = [];
-      for (let i = 0; i < lines.length; i++) {
-        if (re.test(lines[i] ?? "")) {
-          matchedIndices.push(i);
-          if (matchedIndices.length >= maxM) break;
-        }
-      }
+      const accelerated = await fffGrep(
+        {
+          worktree: root,
+          enabled: cfg.fff.enabled,
+          scanTimeoutMs: cfg.fff.scanTimeoutMs,
+        },
+        args.query,
+        { maxMatches: maxM, contextLines: ctxLines, mode: "regex" }
+      );
 
-      const results = matchedIndices.map((i) => {
-        const start = Math.max(0, i - ctxLines);
-        const end = Math.min(lines.length - 1, i + ctxLines);
-        return {
-          matchLine: i + 1,
-          matchText: lines[i] ?? "",
-          context:
-            ctxLines > 0
-              ? lines.slice(start, end + 1).map((text, offset) => ({
-                  line: start + offset + 1,
-                  text,
-                }))
-              : undefined,
-        };
-      });
+      const payload =
+        accelerated.ok && grepMatchesTargetFile(accelerated, fileRel)
+          ? {
+              file: fileRel,
+              totalMatches: accelerated.results.length,
+              accelerated: true,
+              results: accelerated.results.map((result) => ({
+                matchLine: result.matchLine,
+                matchText: result.matchText,
+                context: result.context,
+              })),
+            }
+          : {
+              ...(await grepFileFallback({
+                root,
+                fileRel,
+                query: args.query,
+                maxMatches: maxM,
+                contextLines: ctxLines,
+              })),
+              ...(accelerated.ok ? {} : { fallbackReason: accelerated.reason }),
+            };
 
       const st = getSession(sessionID);
       st.lastGrepAt = Date.now();
       st.lastGrepQuery = args.query;
 
-      return JSON.stringify({ file: fileRel, totalMatches: results.length, results }, null, 2);
+      return JSON.stringify(payload, null, 2);
+    },
+  });
+
+  const tool_rlm_file_search = tool({
+    description:
+      "Fast fuzzy file search across the worktree using FFF when available. Use to find likely files before grep or slice.",
+    args: {
+      query: tool.schema.string(),
+      pageSize: tool.schema.number().int().min(1).max(100).optional(),
+    },
+    async execute(args, ctx) {
+      const root = ctx.worktree ?? worktree;
+      const cfg = await getConfig();
+      const result = await fffFileSearch(
+        {
+          worktree: root,
+          enabled: cfg.fff.enabled,
+          scanTimeoutMs: cfg.fff.scanTimeoutMs,
+        },
+        args.query,
+        args.pageSize ?? 20
+      );
+      return JSON.stringify(result, null, 2);
+    },
+  });
+
+  const tool_rlm_glob = tool({
+    description:
+      "Fast glob file discovery across the worktree using FFF when available. Use for patterns like **/*.ts or packages/*/src/**/*.ts.",
+    args: {
+      pattern: tool.schema.string(),
+      pageSize: tool.schema.number().int().min(1).max(500).optional(),
+    },
+    async execute(args, ctx) {
+      const root = ctx.worktree ?? worktree;
+      const cfg = await getConfig();
+      const result = await fffGlob(
+        {
+          worktree: root,
+          enabled: cfg.fff.enabled,
+          scanTimeoutMs: cfg.fff.scanTimeoutMs,
+        },
+        args.pattern,
+        args.pageSize ?? 100
+      );
+      return JSON.stringify(result, null, 2);
     },
   });
 
@@ -215,7 +366,7 @@ export const RalphWorkerPlugin: Plugin = async ({ client, worktree }) => {
       const sessionID = ctx.sessionID ?? "default";
       const cfg = await getConfig();
       const st = getSession(sessionID);
-      const fileRel = args.file ?? PROTOCOL_FILES.RLM_CTX;
+      const fileRel = args.file ?? rlmCtxRel(await getPlanCtx(root));
 
       if (args.endLine < args.startLine) throw new Error("endLine must be >= startLine.");
       const span = args.endLine - args.startLine + 1;
@@ -323,9 +474,10 @@ export const RalphWorkerPlugin: Plugin = async ({ client, worktree }) => {
       if (!args.patch.includes("PLAN.md")) {
         throw new Error("Patch must target PLAN.md.");
       }
-      await applyPatch(root, args.patch);
+      const pctx = await getPlanCtx(root);
+      await applyProtocolPatch(pctx, PROTOCOL_FILES.PLAN, args.patch);
       await appendTextFile(
-        path.join(root, PROTOCOL_FILES.PLAN),
+        protocolFilePath(pctx, PROTOCOL_FILES.PLAN),
         `\n- ${nowISO()} plan updated: ${args.reason}\n`
       );
       return "PLAN.md updated.";
@@ -343,9 +495,10 @@ export const RalphWorkerPlugin: Plugin = async ({ client, worktree }) => {
       if (!args.patch.includes("RLM_INSTRUCTIONS.md")) {
         throw new Error("Patch must target RLM_INSTRUCTIONS.md.");
       }
-      await applyPatch(root, args.patch);
+      const pctx = await getPlanCtx(root);
+      await applyProtocolPatch(pctx, PROTOCOL_FILES.RLM_INSTR, args.patch);
       await appendTextFile(
-        path.join(root, PROTOCOL_FILES.RLM_INSTR),
+        protocolFilePath(pctx, PROTOCOL_FILES.RLM_INSTR),
         `\n- ${nowISO()} instructions updated: ${args.reason}\n`
       );
       return "RLM_INSTRUCTIONS.md updated.";
@@ -365,10 +518,11 @@ export const RalphWorkerPlugin: Plugin = async ({ client, worktree }) => {
       const sessionID = ctx.sessionID ?? "default";
       await syncSessionAttempt(sessionID, root);
       const st = getSession(sessionID);
+      const pctx = await getPlanCtx(root);
       const id = `ask-${Date.now()}`;
       const timeoutMinutes = args.timeout_minutes ?? 15;
 
-      const data = await readPendingInput(root);
+      const data = await readPendingInput(pctx);
       const questions = data.questions ?? [];
       questions.push({
         id,
@@ -378,7 +532,7 @@ export const RalphWorkerPlugin: Plugin = async ({ client, worktree }) => {
         ...(args.context ? { context: args.context } : {}),
         askedAt: nowISO(),
       });
-      await writePendingInput(root, { ...data, questions, updatedAt: nowISO() });
+      await writePendingInput(pctx, { ...data, questions, updatedAt: nowISO() });
       await appendProgress(
         root,
         `worker/attempt-${st.attempt}`,
@@ -391,7 +545,7 @@ export const RalphWorkerPlugin: Plugin = async ({ client, worktree }) => {
       let polls = 0;
       while (Date.now() < deadline && polls < maxPolls) {
         polls += 1;
-        const latest = await readPendingInput(root);
+        const latest = await readPendingInput(pctx);
         const answer = latest.answers?.find((a) => a.id === id);
         if (answer) {
           return JSON.stringify({ ok: true, id, answer: answer.answer }, null, 2);
@@ -407,6 +561,8 @@ export const RalphWorkerPlugin: Plugin = async ({ client, worktree }) => {
     tool: {
       ralph_load_context: tool_ralph_load_context,
       rlm_grep: tool_rlm_grep,
+      rlm_file_search: tool_rlm_file_search,
+      rlm_glob: tool_rlm_glob,
       rlm_slice: tool_rlm_slice,
       ralph_verify: tool_ralph_verify,
       ralph_report: tool_ralph_report,

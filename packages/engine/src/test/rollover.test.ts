@@ -5,7 +5,11 @@ import { describe, expect, test } from "bun:test";
 import { DEFAULT_TEMPLATES } from "../templates.js";
 import { PROTOCOL_FILES } from "../protocol-files.js";
 import { rolloverState } from "../rollover.js";
+import { resolvePlanContext, resolvePlansConfig } from "../plan-paths.js";
 import { writeTextFile } from "../fs.js";
+
+const legacyCtx = (root: string) =>
+  resolvePlanContext(root, resolvePlansConfig({ dir: "" }));
 
 describe("rolloverState", () => {
   test("snapshots CURRENT_STATE and resets scratch files", async () => {
@@ -21,7 +25,7 @@ describe("rolloverState", () => {
         "# Next Ralph Context\n\n- initial\n"
       );
 
-      await rolloverState(root, DEFAULT_TEMPLATES, 1, "fail", "tests failed");
+      await rolloverState(await legacyCtx(root), DEFAULT_TEMPLATES, 1, "fail", "tests failed");
 
       const prev = await readFile(path.join(root, PROTOCOL_FILES.PREV), "utf8");
       const curr = await readFile(path.join(root, PROTOCOL_FILES.CURR), "utf8");

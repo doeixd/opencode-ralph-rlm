@@ -1,12 +1,18 @@
 {
   "name": "@doeixd/opencode-ralph-rlm",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Ralph RLM v0.2: OpenCode supervisor provider + loop engine + worker plugin",
   "type": "module",
   "workspaces": [
     "packages/*"
   ],
   "main": "./dist/ralph-rlm.js",
+  "bin": {
+    "opencode-ralph-rlm": "./dist/opencode-ralph-rlm.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "exports": {
     ".": "./dist/ralph-rlm.js",
     "./engine": {
@@ -25,7 +31,10 @@
     "packages/worker-plugin/dist",
     "packages/provider/.output",
     ".opencode/plugins",
+    "skills",
+    "dist/opencode-ralph-rlm.js",
     "bin/ralph-serve.ts",
+    "INSTALLATION.md",
     "README.md"
   ],
   "publishConfig": {
@@ -33,11 +42,12 @@
   },
   "scripts": {
     "ralph-serve": "bun run bin/ralph-serve.ts",
-    "build": "bun run build:engine && bun run build:provider && bun run build:worker-plugin && bun run build:plugin",
+    "build": "bun run build:engine && bun run build:provider && bun run build:worker-plugin && bun run build:plugin && bun run build:cli",
     "build:engine": "bun --cwd=packages/engine run build",
     "build:provider": "bun --cwd=packages/provider run build",
     "build:worker-plugin": "bun --cwd=packages/worker-plugin run build",
     "build:plugin": "bun build .opencode/plugins-legacy/ralph-rlm.ts --outfile dist/ralph-rlm.js --target bun --format esm --external @opencode-ai/plugin",
+    "build:cli": "bun build bin/opencode-ralph-rlm.ts --outfile dist/opencode-ralph-rlm.js --target node --format esm --external nitro",
     "typecheck": "tsc -p tsconfig.plugin.json --noEmit && tsc -p tsconfig.legacy-plugin.json --noEmit && bun --cwd=packages/engine run typecheck && bun --cwd=packages/provider run typecheck && bun --cwd=packages/worker-plugin run typecheck",
     "typecheck:plugin": "tsc -p tsconfig.plugin.json --noEmit",
     "typecheck:legacy-plugin": "tsc -p tsconfig.legacy-plugin.json --noEmit",
@@ -70,6 +80,9 @@
   "license": "MIT",
   "peerDependencies": {
     "@opencode-ai/plugin": "*"
+  },
+  "optionalDependencies": {
+    "@ff-labs/fff-node": "^0.9.6"
   },
   "devDependencies": {
     "@doeixd/opencode-ralph-rlm-engine": "workspace:*",

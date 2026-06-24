@@ -8,6 +8,10 @@ import {
   readPendingInput,
   writePendingInput,
 } from "../pending-input.js";
+import { resolvePlanContext, resolvePlansConfig } from "../plan-paths.js";
+
+const legacyCtx = (root: string) =>
+  resolvePlanContext(root, resolvePlansConfig({ dir: "" }));
 
 describe("pending-input", () => {
   test("listUnansweredQuestions filters answered ids", () => {
@@ -38,7 +42,8 @@ describe("pending-input", () => {
   test("addPendingAnswer preserves unanswered questions", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "ralph-pending-"));
     try {
-      await writePendingInput(root, {
+      const ctx = await legacyCtx(root);
+      await writePendingInput(ctx, {
         questions: [
           {
             id: "ask-1",
@@ -50,9 +55,9 @@ describe("pending-input", () => {
         ],
       });
 
-      await addPendingAnswer(root, "ask-1", "Patch it.");
+      await addPendingAnswer(ctx, "ask-1", "Patch it.");
 
-      const data = await readPendingInput(root);
+      const data = await readPendingInput(ctx);
       expect(data.answers).toEqual([{ id: "ask-1", answer: "Patch it." }]);
       expect(data.questions).toHaveLength(1);
       expect(listUnansweredQuestions(data)).toHaveLength(0);

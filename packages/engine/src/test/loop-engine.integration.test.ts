@@ -5,6 +5,9 @@ import { describe, expect, test } from "bun:test";
 import { createLoopEngine } from "../loop-engine.js";
 import { PROTOCOL_FILES } from "../protocol-files.js";
 import { writePendingInput } from "../pending-input.js";
+import { loadPlanContext } from "../protocol-files.js";
+import { stateFilePath } from "../plan-paths.js";
+import { fileExists } from "../fs.js";
 import { createMockRuntime, mockSubscribe } from "./mock-runtime.js";
 
 const fixtureRoot = path.resolve(import.meta.dirname, "../../../../fixtures/minimal-repo");
@@ -12,6 +15,32 @@ const fixtureRoot = path.resolve(import.meta.dirname, "../../../../fixtures/mini
 async function makeFixtureCopy(): Promise<string> {
   const root = await mkdtemp(path.join(tmpdir(), "ralph-loop-"));
   await cp(fixtureRoot, root, { recursive: true });
+  return root;
+}
+
+/** Fixture copy configured for the named-plan layout (.ralph-rlm/plans/<name>/). */
+async function makeNamedFixtureCopy(): Promise<string> {
+  const root = await makeFixtureCopy();
+  // A fresh named install has no root protocol files — remove the fixture's.
+  await Promise.all(
+    Object.values(PROTOCOL_FILES).map((file) =>
+      rm(path.join(root, file), { force: true })
+    )
+  );
+  await writeFile(
+    path.join(root, ".opencode", "ralph.json"),
+    JSON.stringify(
+      {
+        enabled: true,
+        maxAttempts: 5,
+        verify: { command: ["node", "scripts/verify.mjs"], cwd: "." },
+        plans: { dir: ".ralph-rlm/plans", active: "default" },
+      },
+      null,
+      2
+    ),
+    "utf8"
+  );
   return root;
 }
 
@@ -54,7 +83,10 @@ describe("LoopEngine integration", () => {
       expect(status.done).toBe(true);
       expect(events).toContain("loop.done");
 
-      const nextRalph = await Bun.file(path.join(worktree, PROTOCOL_FILES.NEXT_RALPH)).text();
+      const doneCtx = await loadPlanContext(worktree);
+      const nextRalph = await Bun.file(
+        path.join(doneCtx.protocolDir, PROTOCOL_FILES.NEXT_RALPH)
+      ).text();
       expect(nextRalph).toContain("DONE");
     } finally {
       engine.dispose();
@@ -333,7 +365,7 @@ describe("LoopEngine integration", () => {
 
     try {
       await engine.start();
-      await writePendingInput(worktree, {
+      await writePendingInput(await loadPlanContext(worktree), {
         questions: [
           {
             id: "ask-42",
@@ -349,6 +381,63 @@ describe("LoopEngine integration", () => {
       expect(questions).toContain("ask-42");
       const status = await engine.status();
       expect(status.pendingQuestions?.[0]?.id).toBe("ask-42");
+    } finally {
+      engine.dispose();
+      try {
+        await rm(worktree, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+      } catch {
+        // Windows temp dirs can remain locked briefly after verify subprocesses exit.
+      }
+    }
+  });
+
+  test("runs a full loop in named-plan mode (files + markers in plans/<name>/)", async () => {
+    const worktree = await makeNamedFixtureCopy();
+    const runtime = createMockRuntime();
+    const engine = createLoopEngine(
+      { sessionId: "named-session", worktree, bootstrap: true },
+      { runtime, subscribeEvents: (onEvent) => mockSubscribe(runtime, onEvent) }
+    );
+
+    try {
+      await engine.start();
+
+      const ctx = await loadPlanContext(worktree);
+      expect(ctx.mode).toBe("named");
+      expect(ctx.protocolRel).toBe(".ralph-rlm/plans/default");
+
+      // Protocol files + the attempt marker land under the plan dir, not root.
+      expect(
+        await fileExists(path.join(ctx.protocolDir, PROTOCOL_FILES.PLAN))
+      ).toBe(true);
+      expect(await fileExists(path.join(worktree, PROTOCOL_FILES.PLAN))).toBe(false);
+      expect(await fileExists(stateFilePath(ctx, "loop_attempt.json"))).toBe(true);
+
+      // Worker question sync works through the plan's .state dir.
+      await writePendingInput(ctx, {
+        questions: [
+          {
+            id: "ask-named",
+            question: "named?",
+            askedAt: "2026-06-15T00:00:00.000Z",
+            from: "worker",
+            attempt: 1,
+          },
+        ],
+      });
+      const withQuestion = await engine.status();
+      expect(withQuestion.pendingQuestions?.[0]?.id).toBe("ask-named");
+
+      // Drive to pass and confirm the done file is written in the plan dir.
+      await writeFile(path.join(worktree, ".ralph-pass-marker"), "ok\n", "utf8");
+      await runtime.emitIdle("worker-1");
+
+      const done = await engine.status();
+      expect(done.done).toBe(true);
+      const nextRalph = await Bun.file(
+        path.join(ctx.protocolDir, PROTOCOL_FILES.NEXT_RALPH)
+      ).text();
+      expect(nextRalph).toContain("DONE");
     } finally {
       engine.dispose();
       try {

@@ -10,6 +10,8 @@ export const DESTRUCTIVE_TOOLS = new Set([
 export const SAFE_TOOLS = new Set([
   "ralph_load_context",
   "rlm_grep",
+  "rlm_file_search",
+  "rlm_glob",
   "rlm_slice",
   "ralph_verify",
   "ralph_report",

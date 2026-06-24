@@ -1,10 +1,11 @@
-import path from "node:path";
 import {
   SwarmRegistry,
   appendTextFile,
+  loadPlanContext,
   newSwarmId,
   nowISO,
   PROTOCOL_FILES,
+  protocolFilePath,
   runSwarmScript,
   subscribeWorktreeEvents,
   type SpawnSwarmInput,
@@ -95,7 +96,8 @@ export async function spawnSwarmForSession(
   );
 
   const line = `- ${nowISO()} supervisor spawn_swarm ${runner.state.swarmId} (${input.tasks.length} tasks)\n`;
-  await appendTextFile(path.join(worktree, PROTOCOL_FILES.SUPERVISOR_LOG), line).catch(() => {});
+  const pctx = await loadPlanContext(worktree);
+  await appendTextFile(protocolFilePath(pctx, PROTOCOL_FILES.SUPERVISOR_LOG), line).catch(() => {});
 
   return runner;
 }
@@ -115,7 +117,8 @@ export async function runUnsafeSwarmScript(
   });
 
   const line = `- ${nowISO()} supervisor swarm_unsafe_runtime_code_eval ${swarmId} ok=${result.ok}\n`;
-  await appendTextFile(path.join(worktree, PROTOCOL_FILES.SUPERVISOR_LOG), line).catch(() => {});
+  const pctx = await loadPlanContext(worktree);
+  await appendTextFile(protocolFilePath(pctx, PROTOCOL_FILES.SUPERVISOR_LOG), line).catch(() => {});
 
   return { ...result, sessionKey };
 }

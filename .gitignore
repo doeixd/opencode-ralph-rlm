@@ -22,8 +22,23 @@ SUPERVISOR_LOG.md
 TODOS.md
 .opencode/reviewer_state.json
 
-# Local agent/IDE terminal captures (not part of the repo)
+# Named-plan layout (.ralph-rlm/plans/<name>/): ignore volatile per-attempt state,
+# but keep authored plan docs (PLAN.md, RLM_INSTRUCTIONS.md, NOTES, TODOS) committable
+# so plans/versions can be tracked.
+.ralph-rlm/plans/*/.state/
+.ralph-rlm/plans/*/.active
+.ralph-rlm/plans/*/CURRENT_STATE.md
+.ralph-rlm/plans/*/PREVIOUS_STATE.md
+.ralph-rlm/plans/*/AGENT_CONTEXT_FOR_NEXT_RALPH.md
+.ralph-rlm/plans/*/CONTEXT_FOR_RLM.md
+.ralph-rlm/plans/*/CONVERSATION.md
+.ralph-rlm/plans/*/CONVERSATION.*.md
+.ralph-rlm/plans/*/SUPERVISOR_LOG.md
+
+# Local agent/IDE terminal captures and scratch (not part of the repo)
 terminals/
+tmp/
+agent-tools/
 
 # Ephemeral npm auth (bin/publish-npm.ts)
 .npmrc

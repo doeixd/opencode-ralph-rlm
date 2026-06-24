@@ -117,7 +117,7 @@ export async function runVerify(
     return {
       verdict: "unknown",
       output: "",
-      reason: "No verify.command in .opencode/ralph.json.",
+      reason: "No verify.command in ralph.json.",
     };
   }
 
