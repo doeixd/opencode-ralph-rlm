@@ -10,6 +10,7 @@ The v0.2 revision (provider model, loop engine, worker plugin, session bridge, s
 | [`README.md`](README.md) | Full reference (tools, config, API) |
 | [`MIGRATION.md`](MIGRATION.md) | Upgrading from v0.1 plugin |
 | [`REVISION_PLAN.md`](REVISION_PLAN.md) | Contributor architecture + v0.3 roadmap |
+| [DeepWiki](https://deepwiki.com/doeixd/opencode-ralph-rlm) | Browse or ask questions about the codebase |
 
 ---
 

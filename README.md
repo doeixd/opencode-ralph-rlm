@@ -1,3 +1,5 @@
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/doeixd/opencode-ralph-rlm)
+
 # ralph-rlm
 
 An [OpenCode](https://opencode.ai) integration for **long-running, hands-off coding work**. Describe a goal, walk away, and come back to finished work. Behind the scenes a fresh agent keeps working in a loop — checking itself against *your* tests after every attempt — until the job is actually done.
@@ -36,8 +38,9 @@ Ralph: Done — verify passed on attempt 2. Summary is in CONVERSATION.md.
 | [`INSTALLATION.md`](INSTALLATION.md) | Compare install paths (agent skill, CLI, manual) |
 | [`MIGRATION.md`](MIGRATION.md) | Upgrade from the v0.1 plugin |
 | [`CHANGELOG.md`](CHANGELOG.md) | See what changed |
+| [DeepWiki](https://deepwiki.com/doeixd/opencode-ralph-rlm) | Browse / ask questions about the codebase |
 
-The rest of this README is reference material — tools, config, the management API, and how it works under the hood. New here? Follow the [getting-started guide](GETTINGSTARTEDGUIDE.md) instead.
+The rest of this README is reference material — tools, config, the management API, and how it works under the hood. New here? Follow the [getting-started guide](GETTINGSTARTEDGUIDE.md) instead, or [ask DeepWiki](https://deepwiki.com/doeixd/opencode-ralph-rlm) anything about the code.
 
 
 ## Quick start
