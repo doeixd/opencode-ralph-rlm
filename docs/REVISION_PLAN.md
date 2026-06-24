@@ -799,7 +799,7 @@ Query `?sessionId=` or header `x-ralph-session-key` consistent with loop routes.
 
 - [ ] New user: install → `ralph-serve` → select model → loop runs
 - [x] README caveat updated to reflect new architecture
-- [ ] AGENT.md points to REVISION_PLAN for contributors
+- [ ] AGENTS.md points to docs/REVISION_PLAN for contributors
 
 ---
 

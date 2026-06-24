@@ -40,5 +40,9 @@ terminals/
 tmp/
 agent-tools/
 
+# Test fixture: only the tracked config/scripts are committed; ignore any
+# protocol files / run artifacts generated locally inside the fixture.
+fixtures/minimal-repo/
+
 # Ephemeral npm auth (bin/publish-npm.ts)
 .npmrc

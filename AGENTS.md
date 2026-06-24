@@ -9,8 +9,8 @@
 - Loop + swarm logic: `packages/engine/src/`
 - Provider + supervisor tools: `packages/provider/server/`
 - Worker plugin: `packages/worker-plugin/src/`
-- User-facing docs: `README.md`, `GETTINGSTARTEDGUIDE.md`, `MIGRATION.md`
-- Architecture / milestones: `REVISION_PLAN.md`
+- User-facing docs: `README.md`, `docs/GETTINGSTARTEDGUIDE.md`, `docs/MIGRATION.md`
+- Architecture / milestones: `docs/REVISION_PLAN.md`
 - Publish metadata/scripts: `package.json` (root + `packages/*`)
 - Loop config example: `.opencode/ralph.json`
 
@@ -29,10 +29,10 @@
 - Supervisor tools mutate state via engine/registry — not raw SDK calls in the Nitro process for swarm scripts except via subprocess runner.
 
 ## Docs guidelines
-- If behavior changes, update `README.md` and `GETTINGSTARTEDGUIDE.md` in the same change.
-- Breaking UX changes require `MIGRATION.md` and `CHANGELOG.md` entries.
+- If behavior changes, update `README.md` and `docs/GETTINGSTARTEDGUIDE.md` in the same change.
+- Breaking UX changes require `docs/MIGRATION.md` and `CHANGELOG.md` entries.
 - Keep examples copy-pasteable and aligned with actual scripts/config.
 
 ## Ralph / RLM workflow note
-- In this repository, AGENT.md contains static project guidance.
+- In this repository, AGENTS.md contains static project guidance.
 - Loop-specific and attempt-specific strategy belongs in `RLM_INSTRUCTIONS.md`, `PLAN.md`, `CURRENT_STATE.md`, and `NOTES_AND_LEARNINGS.md`.

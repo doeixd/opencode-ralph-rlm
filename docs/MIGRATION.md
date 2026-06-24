@@ -46,8 +46,8 @@ Install the v0.2 plugins:
 
 ### 2. Add provider + OpenCode config
 
-1. Copy [`.opencode/opencode.provider.example.json`](.opencode/opencode.provider.example.json) into your `opencode.json`.
-2. Copy [`.opencode/ralph-provider.example.json`](.opencode/ralph-provider.example.json) if you want file-based supervisor LLM config.
+1. Copy [`.opencode/opencode.provider.example.json`](../.opencode/opencode.provider.example.json) into your `opencode.json`.
+2. Copy [`.opencode/ralph-provider.example.json`](../.opencode/ralph-provider.example.json) if you want file-based supervisor LLM config.
 3. Keep your existing `.opencode/ralph.json` (add `swarm` section if using swarms).
 4. Ensure **`ralph-session-bridge.ts`** is present — required for per-session loop isolation.
 
@@ -157,6 +157,6 @@ For comparison or rollback, load the legacy plugin from `.opencode/plugins-legac
 ## Getting help
 
 - Setup: [`GETTINGSTARTEDGUIDE.md`](GETTINGSTARTEDGUIDE.md)
-- Reference: [`README.md`](README.md)
+- Reference: [`README.md`](../README.md)
 - Architecture: [`REVISION_PLAN.md`](REVISION_PLAN.md)
 - Issues: GitHub issues on [opencode-ralph-rlm](https://github.com/doeixd/opencode-ralph-rlm)

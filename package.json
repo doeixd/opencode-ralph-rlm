@@ -34,7 +34,7 @@
     "skills",
     "dist/opencode-ralph-rlm.js",
     "bin/ralph-serve.ts",
-    "INSTALLATION.md",
+    "docs/INSTALLATION.md",
     "README.md"
   ],
   "publishConfig": {

@@ -34,13 +34,13 @@ Ralph: Done — verify passed on attempt 2. Summary is in CONVERSATION.md.
 
 | Doc | Start here if you want to… |
 |-----|----------|
-| [`GETTINGSTARTEDGUIDE.md`](GETTINGSTARTEDGUIDE.md) | **Set it up and run your first loop** (start here) |
-| [`INSTALLATION.md`](INSTALLATION.md) | Compare install paths (agent skill, CLI, manual) |
-| [`MIGRATION.md`](MIGRATION.md) | Upgrade from the v0.1 plugin |
+| [`GETTINGSTARTEDGUIDE.md`](docs/GETTINGSTARTEDGUIDE.md) | **Set it up and run your first loop** (start here) |
+| [`INSTALLATION.md`](docs/INSTALLATION.md) | Compare install paths (agent skill, CLI, manual) |
+| [`MIGRATION.md`](docs/MIGRATION.md) | Upgrade from the v0.1 plugin |
 | [`CHANGELOG.md`](CHANGELOG.md) | See what changed |
 | [DeepWiki](https://deepwiki.com/doeixd/opencode-ralph-rlm) | Browse / ask questions about the codebase |
 
-The rest of this README is reference material — tools, config, the management API, and how it works under the hood. New here? Follow the [getting-started guide](GETTINGSTARTEDGUIDE.md) instead, or [ask DeepWiki](https://deepwiki.com/doeixd/opencode-ralph-rlm) anything about the code.
+The rest of this README is reference material — tools, config, the management API, and how it works under the hood. New here? Follow the [getting-started guide](docs/GETTINGSTARTEDGUIDE.md) instead, or [ask DeepWiki](https://deepwiki.com/doeixd/opencode-ralph-rlm) anything about the code.
 
 
 ## Quick start
@@ -91,7 +91,7 @@ npx @doeixd/opencode-ralph-rlm setup --dry-run
 
 Manual examples remain in [`.opencode/opencode.provider.example.json`](.opencode/opencode.provider.example.json) and [`.opencode/ralph-provider.example.json`](.opencode/ralph-provider.example.json).
 
-For full setup options, including manual installation, see [`INSTALLATION.md`](INSTALLATION.md).
+For full setup options, including manual installation, see [`INSTALLATION.md`](docs/INSTALLATION.md).
 
 ### 3. Start the provider
 
@@ -291,7 +291,7 @@ or `RALPH_SWARM_UNSAFE_EVAL=1`. Scripts are audited under `.opencode/swarm/runs/
 
 OpenCode does not forward session IDs to custom providers by default. Load **`ralph-session-bridge.ts`** so each TUI session gets its own `LoopRun`.
 
-Confirm after your first supervisor message: response header `x-ralph-session-source` should be `header:x-opencode-session-id`, not `anonymous`. See [GETTINGSTARTEDGUIDE.md § Session correlation](GETTINGSTARTEDGUIDE.md#session-correlation-required-for-multi-session).
+Confirm after your first supervisor message: response header `x-ralph-session-source` should be `header:x-opencode-session-id`, not `anonymous`. See [GETTINGSTARTEDGUIDE.md § Session correlation](docs/GETTINGSTARTEDGUIDE.md#session-correlation-required-for-multi-session).
 
 
 ## Management API

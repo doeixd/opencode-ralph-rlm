@@ -1,6 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "_comment": "Also load .opencode/plugins/ralph-session-bridge.ts for per-session LoopRun correlation (see GETTINGSTARTEDGUIDE.md)",
+  "_comment": "Also load .opencode/plugins/ralph-session-bridge.ts for per-session LoopRun correlation (see docs/GETTINGSTARTEDGUIDE.md)",
   "provider": {
     "ralph-rlm": {
       "npm": "@ai-sdk/openai-compatible",

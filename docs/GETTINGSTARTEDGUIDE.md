@@ -7,7 +7,7 @@ The v0.2 revision (provider model, loop engine, worker plugin, session bridge, s
 | Doc | Purpose |
 |-----|---------|
 | [`INSTALLATION.md`](INSTALLATION.md) | Setup paths: agent skill, CLI, manual |
-| [`README.md`](README.md) | Full reference (tools, config, API) |
+| [`README.md`](../README.md) | Full reference (tools, config, API) |
 | [`MIGRATION.md`](MIGRATION.md) | Upgrading from v0.1 plugin |
 | [`REVISION_PLAN.md`](REVISION_PLAN.md) | Contributor architecture + v0.3 roadmap |
 | [DeepWiki](https://deepwiki.com/doeixd/opencode-ralph-rlm) | Browse or ask questions about the codebase |
@@ -252,7 +252,7 @@ export RALPH_SUPERVISOR_MODEL="gpt-4o-mini"
 
 **Option B — `.opencode/ralph-provider.json`**
 
-See [`.opencode/ralph-provider.example.json`](.opencode/ralph-provider.example.json) for supervisor + worker agent defaults.
+See [`.opencode/ralph-provider.example.json`](../.opencode/ralph-provider.example.json) for supervisor + worker agent defaults.
 
 Worker sessions use `worker.agent` / `worker.modelID` from this file when the engine spawns them.
 
