@@ -36,26 +36,24 @@ export async function loadSupervisorLlmConfig(
 
   const envKey = process.env.RALPH_SUPERVISOR_API_KEY?.trim();
   const fileKey = fileConfig.supervisor?.apiKey?.trim();
+  const envBaseUrl = process.env.RALPH_SUPERVISOR_BASE_URL?.trim();
+  const envModel = process.env.RALPH_SUPERVISOR_MODEL?.trim();
+  const fileBaseUrl = fileConfig.supervisor?.baseUrl?.trim();
+  const fileModel = fileConfig.supervisor?.modelID?.trim() || fileConfig.supervisor?.model?.trim();
 
-  // If no key is configured via env or ralph-provider.json, fall back to
-  // OpenCode's own auth (a keyed provider you've already authenticated), so the
-  // supervisor works without a separate RALPH_SUPERVISOR_API_KEY.
-  const auto = !envKey && !fileKey ? await detectOpencodeSupervisorCreds() : null;
+  // Fall back to OpenCode's own auth (a keyed provider you've already
+  // authenticated) ONLY when the supervisor is otherwise unconfigured — so we
+  // never pair an explicit baseUrl/model with a key from a different provider.
+  const supervisorConfigured = Boolean(
+    envKey || fileKey || envBaseUrl || envModel || fileBaseUrl || fileModel
+  );
+  const auto = supervisorConfigured ? null : await detectOpencodeSupervisorCreds();
 
-  const baseUrl =
-    process.env.RALPH_SUPERVISOR_BASE_URL?.trim() ||
-    fileConfig.supervisor?.baseUrl?.trim() ||
-    auto?.baseUrl ||
-    DEFAULT_BASE_URL;
+  const baseUrl = envBaseUrl || fileBaseUrl || auto?.baseUrl || DEFAULT_BASE_URL;
 
   const apiKey = envKey || fileKey || auto?.apiKey || "";
 
-  const model =
-    process.env.RALPH_SUPERVISOR_MODEL?.trim() ||
-    fileConfig.supervisor?.modelID?.trim() ||
-    fileConfig.supervisor?.model?.trim() ||
-    auto?.model ||
-    DEFAULT_MODEL;
+  const model = envModel || fileModel || auto?.model || DEFAULT_MODEL;
 
   const source = envKey
     ? "env"

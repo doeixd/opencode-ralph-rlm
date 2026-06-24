@@ -383,6 +383,7 @@ Legacy keys (`autoStartOnMainIdle`, `strategistHandoffMinutes`, reviewer setting
 | `RALPH_SUPERVISOR_API_KEY` | Provider supervisor LLM |
 | `RALPH_SUPERVISOR_MODEL` | Provider supervisor LLM |
 | `RALPH_SUPERVISOR_BASE_URL` | Provider supervisor LLM |
+| `RALPH_OPENCODE_AUTH_PATH` | Override path to OpenCode `auth.json` for supervisor credential auto-detect |
 | `OPENCODE_BASE_URL` | Engine SDK (default `http://127.0.0.1:4096`) |
 | `RALPH_PROVIDER_PORT` | Provider port (default `8787`) |
 | `RALPH_WORKTREE` | Default worktree for `opencode-ralph-rlm doctor` / `serve` |

@@ -83,6 +83,25 @@ describe("detectOpencodeSupervisorCreds", () => {
     }
   });
 
+  test("explicit baseUrl without a key does not pull an auto-detected key (no mixing)", async () => {
+    const { dir, authPath } = await writeAuth({ google: { type: "api", key: "g-key" } });
+    const worktree = await mkdtemp(path.join(tmpdir(), "ralph-wt-"));
+    try {
+      delete process.env.RALPH_SUPERVISOR_API_KEY;
+      delete process.env.RALPH_SUPERVISOR_MODEL;
+      process.env.RALPH_OPENCODE_AUTH_PATH = authPath;
+      process.env.RALPH_SUPERVISOR_BASE_URL = "https://my-endpoint.example/v1";
+
+      const cfg = await loadSupervisorLlmConfig(worktree);
+      expect(cfg.baseUrl).toBe("https://my-endpoint.example/v1");
+      expect(cfg.apiKey).toBe(""); // not the google key
+      expect(cfg.source).toBe("default");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+      await rm(worktree, { recursive: true, force: true });
+    }
+  });
+
   test("env key wins over auto-detect", async () => {
     const { dir, authPath } = await writeAuth({ google: { type: "api", key: "g-key" } });
     const worktree = await mkdtemp(path.join(tmpdir(), "ralph-wt-"));
