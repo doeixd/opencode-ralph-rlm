@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Changed
+
+- The "no supervisor API key" error now explains the full lookup order (env → `ralph-provider.json` → OpenCode auth) and how to fix it (`opencode auth login` + restart, or set the key), and reports the resolved `source`.
+
 ## [0.3.2] - 2026-06-24
 
 ### Fixed

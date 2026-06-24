@@ -36,7 +36,12 @@ export async function callSupervisorLlm(
 ): Promise<LlmCompletionResult> {
   if (!config.apiKey) {
     throw new Error(
-      "RALPH_SUPERVISOR_API_KEY is not set. Use RALPH_TEST_MODE=1 for scripted responses."
+      "No supervisor API key found. Ralph looks for one in this order: " +
+        "RALPH_SUPERVISOR_API_KEY env, .opencode/ralph-provider.json, then your OpenCode auth " +
+        "(~/.local/share/opencode/auth.json — a keyed provider like Google or OpenCode Zen). " +
+        "Fixes: authenticate a provider in OpenCode (`opencode auth login`) and restart the provider, " +
+        "or set RALPH_SUPERVISOR_API_KEY. (RALPH_TEST_MODE=1 gives scripted responses without an LLM.) " +
+        `Resolved source: ${config.source}.`
     );
   }
 
