@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.2] - 2026-06-25
+
+### Fixed
+
+- **No more console window popping up on Windows when the provider auto-starts.** Added `windowsHide: true` to the auto-start plugin's spawn and to the `serve` command's provider spawn (the `shell: true` cmd launch was what opened the window). Re-run `setup --force` to refresh an already-installed `ralph-autostart.ts`.
+
 ## [0.4.1] - 2026-06-24
 
 ### Added

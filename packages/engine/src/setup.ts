@@ -62,10 +62,12 @@ export const RalphAutostartPlugin = async (ctx) => {
     // Launch with Node (NOT process.execPath — that is the opencode binary here)
     // and pipe stdio to a file (NOT "ignore" — a detached child with ignored
     // stdio is killed on Windows). detached + unref lets the provider outlive
-    // OpenCode and be reused on the next launch.
+    // OpenCode and be reused on the next launch. windowsHide stops a console
+    // window from popping up on Windows.
     const child = spawn("node", [cli, "serve", "--port", port, "--worktree", wt], {
       detached: true,
       stdio: ["ignore", out, out],
+      windowsHide: true,
     });
     child.unref();
   } catch {

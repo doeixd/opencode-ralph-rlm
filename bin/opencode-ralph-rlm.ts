@@ -157,12 +157,14 @@ async function runServe(args: string[]): Promise<void> {
         env,
         stdio: "inherit",
         shell: process.platform === "win32",
+        windowsHide: true,
       })
     : spawn("npx", ["nitro", "dev", "--port", String(port), "--host", "127.0.0.1"], {
         cwd: providerDir,
         env,
         stdio: "inherit",
         shell: process.platform === "win32",
+        windowsHide: true,
       });
 
   await new Promise<void>((resolve) => {

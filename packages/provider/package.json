@@ -1,7 +1,7 @@
 {
   "name": "@doeixd/opencode-ralph-rlm-provider",
   "private": true,
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Ralph RLM OpenAI-compatible supervisor provider (Nitro)",
   "license": "MIT",
   "repository": {

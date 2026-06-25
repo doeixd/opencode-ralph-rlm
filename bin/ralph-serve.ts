@@ -76,6 +76,7 @@ const child = spawn("bunx", ["nitro", "dev", "--port", String(portValue), "--hos
   env,
   stdio: "inherit",
   shell: process.platform === "win32",
+  windowsHide: true,
 });
 
 child.on("exit", (code) => {
