@@ -191,7 +191,10 @@ function providerBlock(port: number): Record<string, unknown> {
     npm: "@ai-sdk/openai-compatible",
     name: "Ralph RLM",
     options: {
-      baseURL: `http://127.0.0.1:${port}/v1`,
+      // Use localhost, not 127.0.0.1: on Windows, Node/undici can time out
+      // connecting to 127.0.0.1 (IPv4 literal) while localhost resolves fine —
+      // the cause of "cannot reach the server" when the TUI calls the provider.
+      baseURL: `http://localhost:${port}/v1`,
     },
     models: {
       supervisor: {

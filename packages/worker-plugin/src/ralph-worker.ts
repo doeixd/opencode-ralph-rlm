@@ -599,7 +599,10 @@ export const RalphWorkerPlugin: Plugin = async ({ client, worktree }) => {
       if (agents[RALPH_WORKER_AGENT] === undefined) {
         agents[RALPH_WORKER_AGENT] = {
           description: "Ralph RLM worker — loop implementer (auto-managed).",
-          permission: { "ralph_*": "allow", "rlm_*": "allow" },
+          // The worker is a trusted implementer: grant every tool. `*: allow`
+          // covers all built-in OpenCode tools; the explicit ralph_*/rlm_* allows
+          // override the global deny that hides them from normal sessions.
+          permission: { "*": "allow", "ralph_*": "allow", "rlm_*": "allow" },
         };
       }
     },

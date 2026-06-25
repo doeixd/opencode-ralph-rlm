@@ -10,6 +10,8 @@ If it never comes up automatically: the auto-start plugin needs **`node` on PATH
 npx @doeixd/opencode-ralph-rlm serve --worktree .
 ```
 
+**"Cannot reach the server" in the OpenCode TUI (Windows especially):** Node/undici can time out connecting to the IPv4 literal `127.0.0.1` while `localhost` resolves fine. Setup now registers the provider at `http://localhost:<port>/v1` and the provider reaches OpenCode via `localhost`. If your `opencode.json` still has `http://127.0.0.1:8787/v1` from an older install, refresh it: `npx @doeixd/opencode-ralph-rlm setup --force` (then restart OpenCode).
+
 If using a non-default port, pass the same port to setup, serve, and doctor:
 
 ```bash

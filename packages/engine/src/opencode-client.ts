@@ -10,7 +10,9 @@ export type OpencodeRuntime = {
   health: () => Promise<{ healthy: boolean; version?: string; error?: string }>;
 };
 
-const DEFAULT_BASE_URL = "http://127.0.0.1:4096";
+// localhost, not 127.0.0.1: Node/undici on Windows can time out on the IPv4
+// literal while localhost resolves fine (the "cannot reach the server" symptom).
+const DEFAULT_BASE_URL = "http://localhost:4096";
 
 export function createOpencodeRuntime(
   options: OpencodeRuntimeOptions = {}

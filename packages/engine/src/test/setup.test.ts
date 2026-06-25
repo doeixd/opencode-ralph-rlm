@@ -49,7 +49,7 @@ describe("setupProject", () => {
       expect(ralph.verify.command).toEqual(["npm", "test"]);
 
       const opencode = await Bun.file(path.join(worktree, "opencode.json")).json();
-      expect(opencode.provider["ralph-rlm"].options.baseURL).toBe("http://127.0.0.1:9999/v1");
+      expect(opencode.provider["ralph-rlm"].options.baseURL).toBe("http://localhost:9999/v1");
     } finally {
       await rm(worktree, { recursive: true, force: true });
     }

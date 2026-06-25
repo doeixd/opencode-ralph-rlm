@@ -4,6 +4,17 @@ All notable changes to this project are documented here.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.3] - 2026-06-25
+
+### Fixed
+
+- **"Cannot reach the server" errors (Windows).** Setup now registers the provider at `http://localhost:<port>/v1` (was `127.0.0.1`) and the provider reaches OpenCode via `localhost` — Node/undici on Windows can time out on the `127.0.0.1` IPv4 literal while `localhost` resolves fine. Existing installs: re-run `setup --force` to refresh `opencode.json`.
+
+### Changed
+
+- The **`ralph-worker` agent now gets every tool** (`*: allow` plus the ralph_*/rlm_* allows) — workers are trusted implementers, so all built-in OpenCode tools are explicitly available (the destructive-tool gate until `ralph_load_context` still applies).
+- The supervisor prompt now documents the **messaging API** (`POST /api/loops/:id/message` and the `send-message` CLI) so it knows it can be messaged out-of-band by scripts/watchers and can propose that automation.
+
 ## [0.4.2] - 2026-06-25
 
 ### Fixed
