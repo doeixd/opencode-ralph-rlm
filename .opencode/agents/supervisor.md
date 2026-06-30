@@ -3,11 +3,11 @@ description: Safe top-level orchestrator for Ralph loops with constrained delega
 mode: primary
 color: info
 permission:
-  edit: deny
-  bash: deny
-  webfetch: ask
+  edit: allow
+  bash: allow
+  webfetch: allow
   task:
-    "*": deny
+    "*": allow
     "ralph-reviewer": allow
     "docs-writer": allow
     "security-auditor": ask
